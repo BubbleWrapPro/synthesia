@@ -42,15 +42,62 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Ratios from README:
-    // Top 1/9 (Controls), Middle 5/9 (Cascade), Bottom 3/9 (Keyboard)
-    return Scaffold(
-      body: Column(
-        children: [
-          Expanded(flex: 1, child: ControlPanel()),
-          Expanded(flex: 5, child: CascadeView()),
-          Expanded(flex: 3, child: PianoKeyboard()),
-        ],
+    final provider = Provider.of<SessionProvider>(context); // Listen: true par défaut, OK ici
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+
+        // --- 1. LECTURE (Espace) ---
+        const SingleActivator(LogicalKeyboardKey.keyP): () {
+          if (provider.isPlaying) {
+            provider.stopMusic();
+          } else {
+            provider.playMusic(screenHeight);
+          }
+        },
+
+        // --- 2. FICHIER ---
+        // Ctrl + S : Sauvegarder
+        const SingleActivator(LogicalKeyboardKey.keyS, control: true): () {
+          provider.saveToFile();
+        },
+        // Ctrl + O : Importer
+        const SingleActivator(LogicalKeyboardKey.keyO, control: true): () {
+          provider.importFile();
+        },
+        // Ctrl + Delete : Tout Effacer
+        const SingleActivator(LogicalKeyboardKey.delete, control: true): () {
+          provider.clearSession();
+        },
+
+        // --- 3. ÉDITION ---
+        // A : Mode Accord
+        const SingleActivator(LogicalKeyboardKey.keyA): () {
+          provider.toggleChordMode();
+        },
+
+        // S : Ajouter Silence (Ajout rapide de 1 unité pour être fluide)
+        const SingleActivator(LogicalKeyboardKey.space): () {
+          provider.addSilence(1);
+        },
+
+        // Backspace : Supprimer Silence (Suppression rapide de 1 unité)
+        const SingleActivator(LogicalKeyboardKey.backspace): () {
+          provider.removeSilence(1);
+        },
+      },
+      child: Focus(
+        autofocus: true, // Important pour attraper les événements clavier
+        child: Scaffold(
+          body: Column(
+            children: [
+              Expanded(flex: 1, child: ControlPanel()),
+              Expanded(flex: 5, child: CascadeView()),
+              Expanded(flex: 3, child: PianoKeyboard()),
+            ],
+          ),
+        ),
       ),
     );
   }

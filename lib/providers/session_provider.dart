@@ -269,6 +269,32 @@ class SessionProvider with ChangeNotifier {
   void deleteNote(NoteModel note) {
     // Suppression simple
     _session.remove(note);
+
+    if (_isPlaying) return;
+
+    double h = note.height;
+    bool wasChord = false;
+
+    if (!_isChordMode) {
+      for (var otherNotes in _session) {
+        if (otherNotes.chordId == note.chordId) {
+          wasChord = true;
+          break;
+        }
+      }
+      if (!wasChord) {
+        for (var noteToBelittle in _session) {
+          if (noteToBelittle.currentOffset > note.currentOffset) {
+            noteToBelittle.currentOffset -= h;
+          }
+        }
+      }
+    }
+
+
+
+
     notifyListeners();
+
   }
 }

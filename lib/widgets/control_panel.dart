@@ -19,8 +19,8 @@ class ControlPanel extends StatelessWidget {
           // 1. Actions File
           _actionGroup("Fichier", [
             _btn("Effacer", () => provider.clearSession(), Colors.redAccent),
-            _btn("Sauvegarder", () => provider.saveToFile(), Colors.orange),
-            _btn("Importer", () => provider.importFile(), Colors.orange),
+            _btn("Sauvegarder (S)", () => provider.saveToFile(), Colors.orange),
+            _btn("Importer (O)", () => provider.importFile(), Colors.orange),
           ]),
 
           VerticalDivider(width: 20),
@@ -29,7 +29,7 @@ class ControlPanel extends StatelessWidget {
           _actionGroup("Édition", [
             // Toggle Accord
             Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text("Accord", style: TextStyle(fontSize: 10)),
+              Text("Accord (A)", style: TextStyle(fontSize: 10)),
               Switch(
                 value: provider.isChordMode,
                 onChanged: (v) => provider.toggleChordMode(),
@@ -50,8 +50,8 @@ class ControlPanel extends StatelessWidget {
               ),
             ),
 
-            _btn("Silence", () => _dialogSilence(context, provider), Colors.grey),
-            _btn("Sup. Silence", () => _dialogRemoveSilence(context, provider), Colors.grey),
+            _btn("Silence (espace)", () => _dialogSilence(context, provider), Colors.grey),
+            _btn("Sup. Silence (retour)", () => _dialogRemoveSilence(context, provider), Colors.grey),
           ]),
 
           VerticalDivider(width: 20),
@@ -71,7 +71,7 @@ class ControlPanel extends StatelessWidget {
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
               icon: Icon(Icons.play_arrow),
-              label: Text("JOUER"),
+              label: Text("JOUER (P)"),
               onPressed: () => provider.playMusic(MediaQuery.of(context).size.height),
             ),
           ]),
