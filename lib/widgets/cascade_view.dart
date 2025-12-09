@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/session_provider.dart';
+import '../models/note_model.dart';
 
 class CascadeView extends StatelessWidget {
   const CascadeView({super.key});
@@ -11,57 +12,68 @@ class CascadeView extends StatelessWidget {
       color: Colors.black,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final session = Provider.of<SessionProvider>(context).session;
-          final screenHeight = MediaQuery.of(context).size.height;
+          final provider = Provider.of<SessionProvider>(context);
+          final session = provider.session;
 
-          // Ratio: 1 unit height = 1/8 of Screen Height
-          final double pixelRatio = screenHeight / 8.0;
+          // Geometry constants matching PianoKeyboard
           final double whiteKeyWidth = constraints.maxWidth / 52;
+          final double blackKeyWidth = whiteKeyWidth * 0.6;
+          final double screenHeight = MediaQuery.of(context).size.height;
+          // README: Hauteur utilisateur 1 = 1/8 hauteur écran
+          final double pixelRatio = screenHeight / 8.0;
 
           List<Widget> tiles = [];
 
-          // Draw Octave Dividers (Grey lines)
+          // 1. Draw Grid Lines (Octave separators)
+          // Octave width = 7 white keys
           for(int i=1; i<8; i++) {
+            // 7 white keys * width + offset for A0, B0 (2 keys)
+            double left = (2 * whiteKeyWidth) + ((i - 1) * 7 * whiteKeyWidth);
+            if (i == 1) {
+              left = 2 * whiteKeyWidth; // Correction for first octave start
+            } else {
+              left = (2 * whiteKeyWidth) + ((i - 1) * 7 * whiteKeyWidth);
+            }
+
+            // Simplification: Just draw lines every 7 * whiteKeyWidth starting after A0/B0
+            // Ideally, align with C1, C2, etc.
+            double cPos = (2 * whiteKeyWidth) + ((i -1) * 7 * whiteKeyWidth);
+
             tiles.add(Positioned(
-              left: (i * 7 * whiteKeyWidth) + (2 * whiteKeyWidth), // Rough approx of octaves
-              top: 0, bottom: 0,
-              child: Container(width: 1, color: Colors.grey),
+              left: cPos, top: 0, bottom: 0,
+              child: Container(width: 1, color: Colors.grey.withOpacity(0.3)),
             ));
           }
 
-          // Draw Notes
+          // 2. Draw Notes
           for (var note in session) {
             if (note.isSilence) continue;
 
-            // Calculate X position
-            // We need to re-calculate the exact position similar to keyboard
-            // Note: This duplicates logic. Ideally, move "getKeyPos" to a util class.
-            double leftPos = _getKeyLeftPos(note.keyIndex, whiteKeyWidth);
-            double width = _isBlackKey(note.keyIndex) ? whiteKeyWidth * 0.6 : whiteKeyWidth;
+            // Accurate Positioning Logic
+            bool isBlack = _isBlackKey(note.keyIndex);
+            double width = isBlack ? blackKeyWidth : whiteKeyWidth;
+            double left = _calculateLeftPos(note.keyIndex, whiteKeyWidth, blackKeyWidth);
 
-            // Calculate Y position (Bottom Up)
-            // Offset * Ratio
+            // Bottom-up stacking logic
             double bottomPos = note.currentOffset * pixelRatio;
             double height = note.height * pixelRatio;
 
-            // If "Jouer" is active, logic might invert to Top-Down,
-            // but for "Construction", it's bottom up.
+            // Hide if scrolled off top (Optimization)
+            if (bottomPos > constraints.maxHeight) continue;
 
             tiles.add(Positioned(
-              left: leftPos,
+              left: left,
               bottom: bottomPos,
-              height: height,
               width: width,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: note.color,
-                  border: Border.all(color: Colors.white30),
-                ),
-                child: InkWell(
-                  onTap: () {
-                    // Open Edit Dialog (Duration/Color)
-                    _showEditDialog(context, note);
-                  },
+              height: height,
+              child: GestureDetector(
+                onTap: () => _showEditDialog(context, provider, note),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: note.color,
+                    border: Border.all(color: Colors.white54, width: 0.5),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
             ));
@@ -73,14 +85,20 @@ class CascadeView extends StatelessWidget {
     );
   }
 
-  // Simplified helper for demo (needs full logic from Step 4)
-  double _getKeyLeftPos(int index, double whiteW) {
-    int whiteCount = 0;
-    for(int i=0; i<index; i++) {
-      if(!_isBlackKey(i)) whiteCount++;
+  // Exact logic to match PianoKeyboard
+  double _calculateLeftPos(int keyIndex, double whiteW, double blackW) {
+    int whiteKeyCount = 0;
+    for(int i=0; i<keyIndex; i++) {
+      if(!_isBlackKey(i)) whiteKeyCount++;
     }
-    if(!_isBlackKey(index)) return whiteCount * whiteW;
-    return (whiteCount * whiteW) - (whiteW * 0.3); // Center on line
+
+    if (!_isBlackKey(keyIndex)) {
+      return whiteKeyCount * whiteW;
+    } else {
+      // Black keys are centered on the line between two white keys
+      // Shift left by half a black key width relative to the "gap"
+      return (whiteKeyCount * whiteW) - (blackW / 2);
+    }
   }
 
   bool _isBlackKey(int index) {
@@ -88,10 +106,60 @@ class CascadeView extends StatelessWidget {
     return [1, 3, 6, 8, 10].contains(n);
   }
 
-  void _showEditDialog(BuildContext context, dynamic note) {
+  // README: "Un clic ouvre une interface permettant de modifier la durée, la couleur, ou de la supprimer"
+  void _showEditDialog(BuildContext context, SessionProvider prov, NoteModel note) {
+    final heightCtrl = TextEditingController(text: note.height.toString());
+
     showDialog(context: context, builder: (_) => AlertDialog(
-      title: Text("Modifier la tuile"),
-      content: Text("Feature à implémenter: Changer durée/couleur"),
+      title: Text("Modifier la note"),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: heightCtrl,
+            decoration: InputDecoration(labelText: "Durée (Hauteur)"),
+            keyboardType: TextInputType.numberWithOptions(decimal: true),
+          ),
+          SizedBox(height: 20),
+          Text("Couleur:"),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _colorBtn(context, note, Colors.green, prov),
+              _colorBtn(context, note, Colors.blue, prov),
+              _colorBtn(context, note, Colors.red, prov),
+              _colorBtn(context, note, Colors.yellow, prov),
+            ],
+          )
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            prov.deleteNote(note); // Helper to be added in Provider
+            Navigator.pop(context);
+          },
+          child: Text("Supprimer", style: TextStyle(color: Colors.red)),
+        ),
+        TextButton(
+          onPressed: () {
+            double? newH = double.tryParse(heightCtrl.text);
+            if(newH != null) prov.updateNote(note, newH, note.color);
+            Navigator.pop(context);
+          },
+          child: Text("Valider"),
+        ),
+      ],
     ));
+  }
+
+  Widget _colorBtn(BuildContext ctx, NoteModel note, Color c, SessionProvider prov) {
+    return GestureDetector(
+      onTap: () {
+        prov.updateNote(note, note.height, c);
+        Navigator.pop(ctx); // Close after color pick? Or stay open.
+      },
+      child: CircleAvatar(backgroundColor: c, radius: 15),
+    );
   }
 }

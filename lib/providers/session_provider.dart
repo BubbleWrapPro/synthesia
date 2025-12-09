@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_midi/flutter_midi.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import '../models/note_model.dart';
 
 class SessionProvider with ChangeNotifier {
@@ -68,7 +67,7 @@ class SessionProvider with ChangeNotifier {
   void addSilence(int length) {
     for(int i=0; i<length; i++) {
       // Create invisible tile of height 1
-      String cId = DateTime.now().toIso8601String() + "_$i";
+      String cId = "${DateTime.now().toIso8601String()}_$i";
 
       // Shift existing
       for (var note in _session) {
@@ -125,6 +124,60 @@ class SessionProvider with ChangeNotifier {
 
   void setBpm(int bpm) {
     _bpm = bpm.clamp(30, 240);
+    notifyListeners();
+  }
+
+
+  // Update logic for Edit Dialog
+  void updateNote(NoteModel note, double newHeight, Color newColor) {
+    int index = _session.indexOf(note);
+    if (index == -1) return;
+
+    // Create new note with updated values
+    NoteModel updated = NoteModel(
+      keyIndex: note.keyIndex,
+      height: newHeight,
+      color: newColor,
+      chordId: note.chordId,
+      isSilence: note.isSilence,
+      currentOffset: note.currentOffset, // Keep position
+    );
+
+    _session[index] = updated;
+
+    // If height changed, we might need to shift notes above it?
+    // The README doesn't specify "Update shifts others", but "Cascade" usually implies stacking.
+    // For simplicity of the requested features, we update in place.
+    // Ideally: Difference = newHeight - oldHeight. Shift all notes > index by Difference.
+    double diff = newHeight - note.height;
+    if (diff != 0) {
+      for(int i = 0; i < index; i++) { // Notes "above" are usually earlier in list if added sequentially?
+        // Wait, the list is ordered by creation time.
+        // In this app, "Adding" pushes OLD notes up.
+        // So notes [0...index-1] are visually ABOVE this note.
+        _session[i].currentOffset += diff;
+      }
+    }
+
+    notifyListeners();
+  }
+
+  void deleteNote(NoteModel note) {
+    int index = _session.indexOf(note);
+    if (index == -1) return;
+
+    // Logic: If we delete a note, should the ones above fall down?
+    // Yes, to close the gap.
+    double closedGap = note.height;
+
+    _session.removeAt(index);
+
+    // Shift notes that were "pushed up" by this note back down.
+    // These are notes created BEFORE this one (indices 0 to index-1).
+    for(int i = 0; i < index; i++) {
+      _session[i].currentOffset -= closedGap;
+    }
+
     notifyListeners();
   }
 
