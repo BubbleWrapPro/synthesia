@@ -93,8 +93,8 @@ class HomeScreen extends StatelessWidget {
           body: Column(
             children: [
               Expanded(flex: 1, child: ControlPanel()),
-              Expanded(flex: 5, child: CascadeView()),
-              Expanded(flex: 3, child: PianoKeyboard()),
+              Expanded(flex: 6, child: CascadeView()),
+              Expanded(flex: 2, child: PianoKeyboard()),
             ],
           ),
         ),

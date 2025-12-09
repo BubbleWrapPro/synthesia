@@ -19,8 +19,8 @@ class SessionProvider with ChangeNotifier {
 
   // NOUVELLES VARIABLES D'ANIMATION
   // Au lieu de bouger tout le monde, on bouge seulement un groupe de notes actif
-  List<NoteModel> _fallingNotes = []; // Les notes qui tombent actuellement
-  double _fallingY = 0.0; // Leur position verticale
+  final List<NoteModel> _fallingNotes = []; // Les notes qui tombent actuellement
+  final double _fallingY = 0.0; // Leur position verticale
 
   List<NoteModel> get session => _session;
   bool get isChordMode => _isChordMode;
