@@ -25,7 +25,7 @@
 # Description
 
 ## Objectif
-Interface de clavier de piano à 88 touches permettant de créer ses propres cascades de tuile note à note afin de les rejouer pour s'entrainer.
+Interface de clavier de piano à 88 touches permettant de créer ses propries cascades de tuile note à note afin de les rejouer pour s'entrainer.
 
 ## Définitions
 _Tuile_ : désigne un rectangle créé après un clic sur une touche.\
