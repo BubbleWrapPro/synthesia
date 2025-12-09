@@ -2,43 +2,35 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_midi/flutter_midi.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import '../models/note_model.dart';
 
 class SessionProvider with ChangeNotifier {
-  final FlutterMidi flutterMidi = FlutterMidi();
+  // Plus de variable Audio !
 
   // State
-  List<NoteModel> _session = []; // The list of notes
+  List<NoteModel> _session = [];
   bool _isChordMode = false;
-  double _defaultHeight = 1.0;   // User input height ratio
+  double _defaultHeight = 1.0;
   int _bpm = 60;
   bool _isPlaying = false;
 
-  // Getters
+  // Animation: Ce décalage va augmenter pour faire descendre les tuiles
+  double _animationScrollY = 0.0;
+
   List<NoteModel> get session => _session;
   bool get isChordMode => _isChordMode;
   bool get isPlaying => _isPlaying;
   double get defaultHeight => _defaultHeight;
-
-  // Initialize Audio
-  Future<void> loadSoundFont() async {
-    // Ensure you have a .sf2 file in assets
-    final ByteData byte = await rootBundle.load('assets/sounds/Piano.sf2');
-    flutterMidi.prepare(sf2: byte);
-  }
+  double get animationScrollY => _animationScrollY;
 
   // --- ACTIONS ---
 
   // 1. Interactions du clavier: Add Note
   void addNote(int keyIndex, bool isBlackKey) {
-    if (_isPlaying) return; // Disable editing while playing
+    if (_isPlaying) return;
 
     double h = _defaultHeight;
-    // Logic: In chord mode, use the SAME chord ID as the last note.
-    // Otherwise, generate a new ID (using timestamp).
     String cId = (_isChordMode && _session.isNotEmpty)
         ? _session.last.chordId
         : DateTime.now().toIso8601String();
@@ -50,8 +42,6 @@ class SessionProvider with ChangeNotifier {
       chordId: cId,
     );
 
-    // Logic: "Les tuiles existantes remontent"
-    // If NOT in chord mode, shift previous notes up by this note's height.
     if (!_isChordMode) {
       for (var note in _session) {
         note.currentOffset += h;
@@ -59,71 +49,35 @@ class SessionProvider with ChangeNotifier {
     }
 
     _session.add(newNote);
-    playKeySound(keyIndex); // Instant feedback
+    // playKeySound(keyIndex); // SUPPRIMÉ
     notifyListeners();
   }
 
   // 2. Silence
+  // (Gardez addSilence, removeSilence, clearSession, toggleChordMode, setDefaultHeight, setBpm)
+  void clearSession() { _session.clear(); _animationScrollY = 0; notifyListeners(); }
+  void toggleChordMode() { _isChordMode = !_isChordMode; notifyListeners(); }
+  void setDefaultHeight(double h) { _defaultHeight = h; notifyListeners(); }
+  void setBpm(int bpm) { _bpm = bpm.clamp(30, 240); notifyListeners(); }
+
   void addSilence(int length) {
     for(int i=0; i<length; i++) {
-      // Create invisible tile of height 1
-      String cId = "${DateTime.now().toIso8601String()}_$i";
-
-      // Shift existing
-      for (var note in _session) {
-        note.currentOffset += 1.0;
-      }
-
-      _session.add(NoteModel(
-        keyIndex: -1, // No key
-        height: 1.0,
-        color: Colors.transparent,
-        chordId: cId,
-        isSilence: true,
-      ));
+      String cId = DateTime.now().toIso8601String() + "_$i";
+      for (var note in _session) { note.currentOffset += 1.0; }
+      _session.add(NoteModel(keyIndex: -1, height: 1.0, color: Colors.transparent, chordId: cId, isSilence: true));
     }
     notifyListeners();
   }
 
   // 3. Supprimer un silence
   void removeSilence(int length) {
-    if (_session.isEmpty || !_session.last.isSilence) {
-      // Should show error in UI, but we return here for safety
-      return;
-    }
-    // Remove last X silences
+    if (_session.isEmpty || !_session.last.isSilence) return;
     for(int i=0; i<length; i++) {
       if (_session.isNotEmpty && _session.last.isSilence) {
         _session.removeLast();
-        // Shift others back down? README doesn't specify, but implies undoing the "remontent".
-        for (var note in _session) {
-          note.currentOffset -= 1.0;
-        }
+        for (var note in _session) { note.currentOffset -= 1.0; }
       }
     }
-    notifyListeners();
-  }
-
-  // 4. Effacer
-  void clearSession() {
-    _session.clear();
-    notifyListeners();
-  }
-
-  // 5. Mode Accord Toggle
-  void toggleChordMode() {
-    _isChordMode = !_isChordMode;
-    notifyListeners();
-  }
-
-  // 6. Set Height
-  void setDefaultHeight(double h) {
-    _defaultHeight = h;
-    notifyListeners();
-  }
-
-  void setBpm(int bpm) {
-    _bpm = bpm.clamp(30, 240);
     notifyListeners();
   }
 
@@ -182,81 +136,80 @@ class SessionProvider with ChangeNotifier {
   }
 
   // 7. Jouer la musique
-  Future<void> playMusic(double screenHeight) async {
-    if (_session.isEmpty) return;
+  Timer? _animTimer;
+
+  void playMusic(double screenHeight) {
+    if (_session.isEmpty || _isPlaying) return;
 
     _isPlaying = true;
-    notifyListeners();
+    _animationScrollY = 0.0; // On commence du haut (ou bas selon logique)
 
-    // "Fait disparaitre toutes les tuiles" - We reset offsets to top of screen
-    double startY = screenHeight; // Start above visual area
+    // Logique: Les notes sont stockées avec un 'currentOffset' qui représente leur position Y empilée.
+    // Pour les faire "tomber", on doit déplacer tout le monde vers le bas.
+    // Cependant, dans votre logique de construction, '0' est le bas (clavier).
+    // Quand on joue, les notes doivent partir du haut et descendre.
 
-    // We need to group by Chord ID to play them together
-    // Or simple iteration. README says: "Lis les tuiles existantes dans l'ordre"
+    // Simplification visuelle : On va dire que _animationScrollY se soustrait à la position.
+    // On veut faire descendre les tuiles, donc on va DECREMENTER leur position apparente ?
+    // Non, les tuiles sont construites en empilement (Bottom-Up).
+    // Pour les jouer, on veut que cet empilement descende sous le clavier.
+    // Donc on va réduire leur "Bottom position" virtuelle.
 
-    // Simplification for the cascade animation:
-    // We will simulate the "falling" by iterating notes and waiting.
+    // Calcul de la vitesse en pixels/ms
+    // BPM = Battements par minute.
+    // Hauteur 1 = 1 temps.
+    // Hauteur en pixels = (screenHeight / 8).
+    // Donc Vitesse (pixels/sec) = (screenHeight / 8) * (BPM / 60).
 
-    for (var note in _session) {
-      if (!_isPlaying) break; // Stop if cancelled
+    double pixelsPerSecond = (screenHeight / 8.0) * (_bpm / 60.0);
+    double pixelsPerTick = pixelsPerSecond / 60.0; // Pour 60 FPS environ
 
-      // Visual: Note falls.
-      // Audio: Play when it "hits" keyboard.
+    _animTimer?.cancel();
+    _animTimer = Timer.periodic(Duration(milliseconds: 16), (timer) {
+      _animationScrollY += pixelsPerTick;
 
-      // Calculate duration based on BPM
-      // BPM is beats per minute.
-      int msDuration = (60000 / _bpm * note.height).round();
+      // Condition d'arrêt : La dernière note (la plus haute) a disparu
+      // La hauteur totale de la pile est l'offset de la première note (la plus haute dans la pile)
+      double totalHeight = _session.isEmpty ? 0 : (_session.first.currentOffset + _session.first.height) * (screenHeight / 8.0);
 
-      if (!note.isSilence) {
-        playKeySound(note.keyIndex);
+      if (_animationScrollY > totalHeight + screenHeight) {
+        stopMusic();
       }
 
-      // Wait for the duration of this note (or chord) before playing next
-      // *Note: Real chord logic would require grouping, here we play sequentially strictly*
-      // If it's a chord, the README says "tuiles d'un même accord... glissent".
-      // Since we store strict order, we just wait.
+      notifyListeners();
+    });
+  }
 
-      // If next note has SAME chordId, we don't wait (play simultaneously)
-      int nextIndex = _session.indexOf(note) + 1;
-      bool isNextChordPart = nextIndex < _session.length &&
-          _session[nextIndex].chordId == note.chordId;
-
-      if (!isNextChordPart) {
-        await Future.delayed(Duration(milliseconds: msDuration));
-      }
-    }
-
+  void stopMusic() {
     _isPlaying = false;
+    _animTimer?.cancel();
+    _animationScrollY = 0.0; // Reset
     notifyListeners();
   }
 
-  void playKeySound(int keyIndex) {
-    if (keyIndex >= 0) {
-      flutterMidi.playMidiNote(midi: keyIndex + 21); // MIDI 21 is A0 (first piano key)
-    }
-  }
 
-  // 8. Sauvegarder & Importer (Basic File I/O)
+  // --- SAUVEGARDE & IMPORT (Gardez votre code corrigé ici) ---
+  // Copiez ici le code saveToFile/importFile de l'étape précédente avec file_selector et le fix JSON .value
   Future<void> saveToFile() async {
-    String? path = await FilePicker.platform.saveFile(
-      dialogTitle: 'Sauvegarder la session',
-      fileName: 'ma_musique.json',
-    );
-    if (path != null) {
-      File file = File(path);
+    const XTypeGroup typeGroup = XTypeGroup(label: 'JSON files', extensions: <String>['json']);
+    final FileSaveLocation? result = await getSaveLocation(suggestedName: 'ma_musique.json', acceptedTypeGroups: [typeGroup]);
+    if (result != null) {
+      final File file = File(result.path);
       String jsonStr = jsonEncode(_session.map((e) => e.toJson()).toList());
       await file.writeAsString(jsonStr);
     }
   }
 
   Future<void> importFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles();
-    if (result != null) {
-      File file = File(result.files.single.path!);
+    const XTypeGroup typeGroup = XTypeGroup(label: 'JSON files', extensions: <String>['json']);
+    final XFile? file = await openFile(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
+    if (file != null) {
       String content = await file.readAsString();
-      List<dynamic> jsonList = jsonDecode(content);
-      _session = jsonList.map((e) => NoteModel.fromJson(e)).toList();
-      notifyListeners();
+      try {
+        List<dynamic> jsonList = jsonDecode(content);
+        _session = jsonList.map((e) => NoteModel.fromJson(e)).toList();
+        notifyListeners();
+      } catch (e) { print(e); }
     }
   }
 }

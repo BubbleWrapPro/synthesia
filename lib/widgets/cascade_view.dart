@@ -19,7 +19,6 @@ class CascadeView extends StatelessWidget {
           final double whiteKeyWidth = constraints.maxWidth / 52;
           final double blackKeyWidth = whiteKeyWidth * 0.6;
           final double screenHeight = MediaQuery.of(context).size.height;
-          // README: Hauteur utilisateur 1 = 1/8 hauteur écran
           final double pixelRatio = screenHeight / 8.0;
 
           List<Widget> tiles = [];
@@ -41,7 +40,7 @@ class CascadeView extends StatelessWidget {
 
             tiles.add(Positioned(
               left: cPos, top: 0, bottom: 0,
-              child: Container(width: 1, color: Colors.grey.withOpacity(0.3)),
+              child: Container(width: 1, color: Colors.grey),
             ));
           }
 
@@ -54,16 +53,19 @@ class CascadeView extends StatelessWidget {
             double width = isBlack ? blackKeyWidth : whiteKeyWidth;
             double left = _calculateLeftPos(note.keyIndex, whiteKeyWidth, blackKeyWidth);
 
-            // Bottom-up stacking logic
-            double bottomPos = note.currentOffset * pixelRatio;
+            double originalBottom = note.currentOffset * pixelRatio;
+            double bottomPos = originalBottom - provider.animationScrollY;
+
             double height = note.height * pixelRatio;
 
-            // Hide if scrolled off top (Optimization)
-            if (bottomPos > constraints.maxHeight) continue;
+            // Si la note est déjà passée sous le clavier (bottom + height < 0), on ne l'affiche pas
+            if (bottomPos + height < 0) continue;
+
+            // Si la note est trop haut (pas encore visible), on peut l'afficher ou pas, Flutter gère bien le clipping.
 
             tiles.add(Positioned(
               left: left,
-              bottom: bottomPos,
+              bottom: bottomPos, // <-- C'est ici que ça bouge !
               width: width,
               height: height,
               child: GestureDetector(

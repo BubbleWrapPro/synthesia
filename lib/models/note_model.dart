@@ -23,7 +23,7 @@ class NoteModel {
   Map<String, dynamic> toJson() => {
     'keyIndex': keyIndex,
     'height': height,
-    'color': color,
+    'color': color.value,
     'chordId': chordId,
     'isSilence': isSilence,
   };

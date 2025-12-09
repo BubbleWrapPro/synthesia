@@ -17,7 +17,7 @@ void main() {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => SessionProvider()..loadSoundFont()),
+        ChangeNotifierProvider(create: (context) => SessionProvider()),
       ],
       child: const MyApp(),
     ),

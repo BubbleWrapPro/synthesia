@@ -31,8 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
   provider: ^6.0.0          # State Management
-  flutter_midi: ^1.0.0      # Audio playback
-  file_picker: ^4.0.0       # File I/O
+  file_selector: ^1.0.0     # File I/O without issues
   path_provider: ^2.0.0     # Finding save paths
   intl: ^0.18.0             # Date formatting (optional)
 
