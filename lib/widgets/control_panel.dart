@@ -62,7 +62,7 @@ class ControlPanel extends StatelessWidget {
               width: 40,
               child: TextField(
                 decoration: InputDecoration(labelText: "BPM"),
-                controller: TextEditingController(text: "60"),
+                controller: TextEditingController(text: provider.bpm.toString()),
                 keyboardType: TextInputType.number,
                 onSubmitted: (v) => provider.setBpm(int.tryParse(v) ?? 60),
               ),

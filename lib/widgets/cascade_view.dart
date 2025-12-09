@@ -45,31 +45,38 @@ class CascadeView extends StatelessWidget {
           }
 
           // 2. Draw Notes
-          for (var note in session) {
-            if (note.isSilence) continue;
+          List<NoteModel> notesToDraw = provider.isPlaying ? provider.activeFallingNotes : session;
 
-            // Accurate Positioning Logic
+          for (var note in notesToDraw) {
+            if (note.isSilence && !provider.isPlaying) continue; // On n'affiche pas les silences en edit? (Optionnel)
+            if (note.isSilence && provider.isPlaying) continue;  // On n'affiche pas les silences en jeu
+
             bool isBlack = _isBlackKey(note.keyIndex);
             double width = isBlack ? blackKeyWidth : whiteKeyWidth;
             double left = _calculateLeftPos(note.keyIndex, whiteKeyWidth, blackKeyWidth);
-
-            double originalBottom = note.currentOffset * pixelRatio;
-            double bottomPos = originalBottom - provider.animationScrollY;
-
             double height = note.height * pixelRatio;
 
-            // Si la note est déjà passée sous le clavier (bottom + height < 0), on ne l'affiche pas
-            if (bottomPos + height < 0) continue;
+            double bottomPos;
 
-            // Si la note est trop haut (pas encore visible), on peut l'afficher ou pas, Flutter gère bien le clipping.
+            if (provider.isPlaying) {
+              // EN LECTURE : La position est directement stockée dans currentOffset par le Timer
+              bottomPos = note.currentOffset;
+            } else {
+              // EN EDITION : Calcul statique empilé
+              bottomPos = note.currentOffset * pixelRatio;
+            }
+
+            // Clipping : ne pas dessiner si hors écran (optimisation)
+            if (bottomPos > constraints.maxHeight) continue;
 
             tiles.add(Positioned(
               left: left,
-              bottom: bottomPos, // <-- C'est ici que ça bouge !
+              bottom: bottomPos,
               width: width,
               height: height,
               child: GestureDetector(
-                onTap: () => _showEditDialog(context, provider, note),
+                // Désactiver le clic pendant la lecture
+                onTap: provider.isPlaying ? null : () => _showEditDialog(context, provider, note),
                 child: Container(
                   decoration: BoxDecoration(
                     color: note.color,

@@ -17,11 +17,22 @@ class SessionProvider with ChangeNotifier {
   double _animationScrollY = 0.0;
   Timer? _animTimer;
 
+  // NOUVELLES VARIABLES D'ANIMATION
+  // Au lieu de bouger tout le monde, on bouge seulement un groupe de notes actif
+  List<NoteModel> _fallingNotes = []; // Les notes qui tombent actuellement
+  double _fallingY = 0.0; // Leur position verticale
+
   List<NoteModel> get session => _session;
   bool get isChordMode => _isChordMode;
   bool get isPlaying => _isPlaying;
   double get defaultHeight => _defaultHeight;
+  int get bpm => _bpm;
   double get animationScrollY => _animationScrollY;
+
+  // Getters pour la vue
+  List<NoteModel> get fallingNotes => _fallingNotes;
+  double get fallingY => _fallingY;
+
 
   // --- ACTIONS ---
 
@@ -79,49 +90,100 @@ class SessionProvider with ChangeNotifier {
   void setBpm(int bpm) { _bpm = bpm.clamp(30, 240); notifyListeners(); }
 
   // --- LOGIQUE JOUER ---
+  List<NoteModel> _activeFallingNotes = [];
+  List<NoteModel> get activeFallingNotes => _activeFallingNotes;
 
-  void playMusic(double screenHeight) {
+  // --- NOUVELLE LOGIQUE FLUIDE ---
+
+  void playMusic(double screenHeight) async {
     if (_session.isEmpty || _isPlaying) return;
 
     _isPlaying = true;
+    _activeFallingNotes = []; // Liste des notes en train de tomber
+    notifyListeners();
 
-    // On positionne le scroll tout en haut (négatif) pour que les notes
-    // les plus hautes (les premières de la liste) soient hors écran au début.
-    // La zone visible fait 5/9 de l'écran.
-    double cascadeViewHeight = screenHeight * (5.0 / 9.0);
+    // 1. Démarrer le moteur physique (le Timer qui fait tout descendre)
+    // Hauteur de la vue cascade (5/9 de l'écran)
+    double cascadeHeight = screenHeight * (5.0 / 9.0);
+    double pixelRatio = screenHeight / 8.0;
 
-    // ASTUCE : On commence avec un décalage négatif égal à la hauteur de la vue + la hauteur totale des notes.
-    // Comme ça, les notes descendent jusqu'au clavier.
-    _animationScrollY = -cascadeViewHeight;
+    // Vitesse : Pixels par milliseconde
+    // Formule : (Hauteur d'1 temps en px) * (BPM / 60) / 1000 ms
+    double pixelsPerMs = (pixelRatio * (_bpm / 60.0)) / 1000.0;
 
-    // Vitesse de chute
-    double pixelsPerSecond = (screenHeight / 8.0) * (_bpm / 60.0);
-    double pixelsPerTick = pixelsPerSecond / 60.0;
-
+    // Le Timer tourne à 60fps (toutes les 16ms)
     _animTimer?.cancel();
     _animTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
-      _animationScrollY += pixelsPerTick;
-
-      // Stop quand la dernière note (la plus haute dans la pile, donc index 0) a passé le bas.
-      // Dans notre logique "empilement", la note index 0 est la plus HAUTE visuellement (offset le plus grand).
-      // Attendons que son offset redescende à 0.
-
-      double highestNoteOffset = _session.first.currentOffset;
-      double pixelOffsetOfHighest = highestNoteOffset * (screenHeight / 8.0);
-
-      // Si le scroll a dépassé la position de la note la plus haute + marge
-      if (_animationScrollY > pixelOffsetOfHighest + cascadeViewHeight) {
-        stopMusic();
+      if (_activeFallingNotes.isEmpty && !_isPlaying) {
+        timer.cancel();
+        return;
       }
+
+      // Faire descendre toutes les notes actives
+      // On modifie une propriété temporaire 'currentOffset' qu'on détourne pour servir de position Y
+      // ATTENTION : Pour l'affichage, currentOffset servira ici de "Bottom Position"
+      for (var note in _activeFallingNotes) {
+        note.currentOffset -= (pixelsPerMs * 16.0); // Elle descend
+      }
+
+      // Nettoyage : Supprimer les notes qui sont passées sous le clavier
+      _activeFallingNotes.removeWhere((n) => n.currentOffset + (n.height * pixelRatio) < 0);
 
       notifyListeners();
     });
+
+    // 2. L'Injecteur de notes (Le chef d'orchestre)
+    // On parcourt la session dans l'ordre d'enregistrement (0 = première note jouée)
+    // Contrairement à la vue statique, ici on veut jouer 0, puis 1, puis 2...
+
+    for (var note in _session) {
+      if (!_isPlaying) break;
+
+      // Créer une COPIE de la note pour l'animation (pour ne pas casser la sauvegarde)
+      NoteModel fallingNote = NoteModel(
+        keyIndex: note.keyIndex,
+        height: note.height,
+        color: note.color,
+        chordId: note.chordId,
+        isSilence: note.isSilence,
+        // Position de départ : Tout en haut de la cascade
+        currentOffset: cascadeHeight,
+      );
+
+      // Ajouter à la liste visible
+      if (!fallingNote.isSilence) {
+        _activeFallingNotes.add(fallingNote);
+      }
+
+      // CALCUL DU DELAI AVANT LA PROCHAINE NOTE
+      // C'est ici que la magie opère. On attend la DUREE de la note actuelle.
+      // Durée en ms = (60000 / BPM) * HauteurNote
+      int durationMs = ((60000 / _bpm) * note.height).round();
+
+      // Gestion des ACCORDS : Si la prochaine note a le même ID, on n'attend pas !
+      int currentIndex = _session.indexOf(note);
+      int nextIndex = currentIndex + 1;
+      bool isNextChordPart = false;
+      if (nextIndex < _session.length) {
+        if (_session[nextIndex].chordId == note.chordId) {
+          isNextChordPart = true;
+        }
+      }
+
+      if (!isNextChordPart) {
+        await Future.delayed(Duration(milliseconds: durationMs));
+      }
+    }
+
+    // Fin de la chanson, mais on laisse les dernières notes finir de tomber
+    await Future.delayed(Duration(seconds: 5)); // Marge de sécurité
+    stopMusic();
   }
 
   void stopMusic() {
     _isPlaying = false;
+    _activeFallingNotes.clear();
     _animTimer?.cancel();
-    _animationScrollY = 0.0;
     notifyListeners();
   }
 
