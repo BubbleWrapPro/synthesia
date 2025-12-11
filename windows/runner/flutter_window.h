@@ -8,6 +8,13 @@
 
 #include "win32_window.h"
 
+// For midi input methods
+#include <memory>
+#include <flutter/method_channel.h>
+#include <flutter/standard_method_codec.h>
+
+#define WM_MIDI_DATA (WM_USER + 100)
+
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
  public:
@@ -23,11 +30,19 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
+    // For MIDI I/O
+  HMIDIIN hMidiIn = NULL;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
+
+  void StartMidiInput();
+  static void CALLBACK MidiInProc(HMIDIIN hMidiIn, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2);
+
   // The project to run.
   flutter::DartProject project_;
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
 };
+
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

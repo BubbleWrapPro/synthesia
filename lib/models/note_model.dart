@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 class NoteModel {
   final int keyIndex;       // 0 to 87 (Which piano key)
-  final double height;      // Duration/Height of the rect
+  double height;      // Duration/Height of the rect
   final Color color;        // Green (white key) or Blue (black key)
   final String chordId;     // To group notes in "Mode Accord"
   final bool isSilence;     // Special flag for Silence
