@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 import '../models/note_model.dart';
-// For midi I/O
 import 'package:flutter/services.dart';
 
 class SessionProvider with ChangeNotifier {
@@ -91,7 +90,7 @@ class SessionProvider with ChangeNotifier {
     // --- LOGIQUE INTELLIGENTE D'ACCORD (FIX 1) ---
     DateTime now = DateTime.now();
     // Si la dernière note a été jouée il y a moins de 70ms, on considère que c'est le même accord
-    if (_lastMidiNoteTime != null && now.difference(_lastMidiNoteTime!).inMilliseconds < 70) {
+    if (_lastMidiNoteTime != null && now.difference(_lastMidiNoteTime!).inMilliseconds < 120) {
       // On garde le même ID que la note précédente
     } else {
       // Sinon, on crée un nouvel ID d'accord
@@ -104,10 +103,11 @@ class SessionProvider with ChangeNotifier {
     // Elle commence avec une hauteur minime, elle grandira dans la boucle
     NoteModel newNote = NoteModel(
       keyIndex: keyIndex,
-      height: 1.0,
+      height: 0.01,
       color: isBlack ? Colors.blue : Colors.lightGreen,
       chordId: DateTime.now().toIso8601String(),
       currentOffset: 0.0, // Elle apparaît tout en bas (le présent)
+      fromMidi: true, // [NEW] Marqueur
     );
 
     _session.add(newNote);
@@ -146,7 +146,8 @@ class SessionProvider with ChangeNotifier {
       }
 
       // Vitesse de défilement (pixels par frame)
-      double speed = 0.02;
+      double msPerBeat = 60000.0 / _bpm;
+      double speed = 16.0 / msPerBeat;
 
       // On parcourt toute la session pour mettre à jour les positions/tailles
       for (int i = 0; i < _session.length; i++) {
@@ -165,6 +166,7 @@ class SessionProvider with ChangeNotifier {
             chordId: note.chordId,
             isSilence: note.isSilence,
             currentOffset: 0.0, // Reste ancrée en bas
+            fromMidi: note.fromMidi,
           );
 
           _session[i] = grownNote;
@@ -206,6 +208,7 @@ class SessionProvider with ChangeNotifier {
       height: h,
       color: isBlackKey ? Colors.blue : Colors.lightGreen,
       chordId: cId,
+      fromMidi: false,
     );
 
     // En mode manuel sans accord, on pousse les autres vers le haut
@@ -286,40 +289,55 @@ class SessionProvider with ChangeNotifier {
     });
 
     // 2. Injecteur de notes (Sequencer)
-    for (var note in _session) {
+    for (int i = 0; i < _session.length; i++) {
       if (!_isPlaying) break;
 
+      NoteModel note = _session[i];
+
+      // 1. Lancer la note visuelle
       NoteModel fallingNote = NoteModel(
         keyIndex: note.keyIndex,
         height: note.height,
         color: note.color,
         chordId: note.chordId,
         isSilence: note.isSilence,
-        currentOffset: cascadeHeight, // Départ en haut
+        currentOffset: cascadeHeight,
+        fromMidi: note.fromMidi,
       );
 
       if (!fallingNote.isSilence) {
         _activeFallingNotes.add(fallingNote);
       }
 
-      int durationMs = ((60000 / _bpm) * note.height).round();
+      // 2. Calculer le délai avant la PROCHAINE note
+      int waitMs = 0;
 
-      // Gestion simple des accords pour le playback
-      int currentIndex = _session.indexOf(note);
-      int nextIndex = currentIndex + 1;
-      bool isNextChordPart = false;
-      if (nextIndex < _session.length) {
-        if (_session[nextIndex].chordId == note.chordId) {
-          isNextChordPart = true;
-        }
+      if (i + 1 < _session.length) {
+        NoteModel nextNote = _session[i + 1];
+
+        // Le "Top" (début chronologique) de la note = offset + height
+        double currentTop = note.currentOffset + note.height;
+        double nextTop = nextNote.currentOffset + nextNote.height;
+
+        // La différence est le temps qui sépare les deux attaques
+        double diffHeight = currentTop - nextTop;
+
+        // Convertir cette distance en millisecondes
+        // Durée d'1 unité de hauteur = (60000 / BPM)
+        waitMs = ((60000 / _bpm) * diffHeight).round();
+
+        if (waitMs < 0) waitMs = 0; // Sécurité si ordre incorrect
+      } else {
+        // Dernière note : on attend sa propre durée pour finir proprement
+        waitMs = ((60000 / _bpm) * note.height).round();
       }
 
-      if (!isNextChordPart) {
-        await Future.delayed(Duration(milliseconds: durationMs));
+      if (waitMs > 0) {
+        await Future.delayed(Duration(milliseconds: waitMs));
       }
     }
 
-    await Future.delayed(const Duration(seconds: 5));
+    await Future.delayed(const Duration(seconds: 3));
     stopMusic();
   }
 
@@ -385,7 +403,8 @@ class SessionProvider with ChangeNotifier {
     _session[idx] = NoteModel(
         keyIndex: note.keyIndex, height: newH, color: newC,
         chordId: note.chordId, isSilence: note.isSilence,
-        currentOffset: note.currentOffset
+        currentOffset: note.currentOffset,
+        fromMidi: note.fromMidi
     );
     notifyListeners();
   }
