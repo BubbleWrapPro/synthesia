@@ -435,4 +435,24 @@ class SessionProvider with ChangeNotifier {
     }
     notifyListeners();
   }
+
+
+  void deleteLastNote(BuildContext context){
+
+    if (_session.isEmpty) {
+
+      // Toast pour avertir l'utilisateur qu'il n'y a pas de notes à supprimer
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Aucune note à effacer.")));
+
+      return;
+    }
+    deleteNote(_session[_session.length - 1]);
+
+    if (_isPlaying) return;
+
+    notifyListeners();
+  }
+
+
+
 }

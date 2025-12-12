@@ -52,6 +52,7 @@ class ControlPanel extends StatelessWidget {
 
             _btn("Silence (espace)", () => _dialogSilence(context, provider), Colors.grey),
             _btn("Sup. Silence (retour)", () => _dialogRemoveSilence(context, provider), Colors.grey),
+            _btn("Effacer Note (del)", () => provider.deleteLastNote(context), Colors.grey),
           ]),
 
           const VerticalDivider(width: 20),
@@ -99,9 +100,6 @@ class ControlPanel extends StatelessWidget {
   }
 
   Widget _actionGroup(String title, List<Widget> children) {
-    // J'ai ajouté une bordure optionnelle ou un titre si vous le souhaitez,
-    // mais pour l'instant je garde votre structure simple : une Row.
-    // Vous pourriez encapsuler cela dans une Column avec le titre 'title' au-dessus si vous vouliez afficher les noms des groupes.
     return Row(children: children.map((c) => Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: c)).toList());
   }
 
