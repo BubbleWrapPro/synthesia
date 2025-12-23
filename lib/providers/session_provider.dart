@@ -134,8 +134,8 @@ class SessionProvider with ChangeNotifier {
     _recordingTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
       // 1. Debugging : Voir l'état quand ça devrait s'arrêter
       if (_activeRecordingNotes.isNotEmpty) {
-        // Décommenter la ligne suivante si vous voulez voir quelles touches sont bloquées dans la console
-        debugPrint("Touches actives: ${_activeRecordingNotes.keys.toList()}");
+        // Décommenter la ligne suivante si on veut voir quelles touches sont bloquées dans la console
+        // debugPrint("Touches actives: ${_activeRecordingNotes.keys.toList()}");
       }
 
       // 2. Condition d'arrêt (Pause)
