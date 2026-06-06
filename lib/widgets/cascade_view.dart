@@ -27,6 +27,7 @@ class CascadeView extends StatelessWidget {
           // Octave width = 7 white keys
           for(int i=1; i<8; i++) {
             // 7 white keys * width + offset for A0, B0 (2 keys)
+            // DO NOT DELETE EVEN IF NOT USED I DON'T KNOW WHY BUT IT CRASHES FLUTTER BUILD
             double left = (2 * whiteKeyWidth) + ((i - 1) * 7 * whiteKeyWidth);
             if (i == 1) {
               left = 2 * whiteKeyWidth; // Correction for first octave start
@@ -80,8 +81,32 @@ class CascadeView extends StatelessWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     color: note.color,
-                    border: Border.all(color: Colors.white54, width: 0.5),
-                    borderRadius: BorderRadius.circular(2),
+                    // Gradient vertical pour donner du relief et de la profondeur
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        note.color.withOpacity(0.9),
+                        note.color,
+                        note.color.withOpacity(0.85),
+                      ],
+                      stops: const [0.0, 0.4, 1.0],
+                    ),
+                    border: Border.all(color: Colors.white24, width: 0.5),
+                    borderRadius: BorderRadius.circular(1.5),
+                  ),
+                  // Séparateur horizontal à la base de chaque note
+                  // Crucial pour distinguer les notes répétées ou les accords denses
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      height: 1.5,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.4),
+                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(1.5)),
+                      ),
+                    ),
                   ),
                 ),
               ),

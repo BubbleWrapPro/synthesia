@@ -24,13 +24,13 @@ class ControlPanel extends StatelessWidget {
             _btn("MIDI ↻", () => provider.initMidi(), Colors.blueGrey),
           ]),
 
-          VerticalDivider(width: 20),
+          const VerticalDivider(width: 20),
 
           // 2. Actions Note/Silence
           _actionGroup("Édition", [
             // Toggle Accord
             Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text("Accord (A)", style: TextStyle(fontSize: 10)),
+              const Text("Accord (A)", style: TextStyle(fontSize: 10)),
               Switch(
                 value: provider.isChordMode,
                 onChanged: (v) => provider.toggleChordMode(),
@@ -38,13 +38,13 @@ class ControlPanel extends StatelessWidget {
                 inactiveThumbColor: Colors.grey,
               )
             ]),
-            SizedBox(width: 10),
+            const SizedBox(width: 10),
 
             // Hauteur Defaut
             SizedBox(
               width: 50,
               child: TextField(
-                decoration: InputDecoration(labelText: "H (def)", counterText: ""),
+                decoration: const InputDecoration(labelText: "H (def)", counterText: ""),
                 controller: TextEditingController(text: provider.defaultHeight.toString()),
                 keyboardType: TextInputType.number,
                 onSubmitted: (v) => provider.setDefaultHeight(double.tryParse(v) ?? 1.0),
@@ -53,27 +53,46 @@ class ControlPanel extends StatelessWidget {
 
             _btn("Silence (espace)", () => _dialogSilence(context, provider), Colors.grey),
             _btn("Sup. Silence (retour)", () => _dialogRemoveSilence(context, provider), Colors.grey),
+            _btn("Effacer Note (del)", () => provider.deleteLastNote(context), Colors.grey),
           ]),
 
-          VerticalDivider(width: 20),
+          const VerticalDivider(width: 20),
 
           // 3. Playback
           _actionGroup("Lecture", [
             SizedBox(
               width: 40,
               child: TextField(
-                decoration: InputDecoration(labelText: "BPM"),
+                decoration: const InputDecoration(labelText: "BPM"),
                 controller: TextEditingController(text: provider.bpm.toString()),
                 keyboardType: TextInputType.number,
                 onSubmitted: (v) => provider.setBpm(int.tryParse(v) ?? 60),
               ),
             ),
-            SizedBox(width: 10),
+            const SizedBox(width: 10),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              icon: Icon(Icons.play_arrow),
-              label: Text("JOUER (P)"),
+              icon: const Icon(Icons.play_arrow),
+              label: const Text("JOUER (P)"),
               onPressed: () => provider.playMusic(MediaQuery.of(context).size.height),
+            ),
+          ]),
+
+          const VerticalDivider(width: 20),
+
+          // 4. MIDI Options (AJOUTÉ ICI)
+          _actionGroup("Midi", [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text("Auto Silence", style: TextStyle(fontSize: 10)),
+                // La taille par défaut de la Checkbox peut être grande, on peut utiliser Transform.scale pour ajuster si besoin
+                Checkbox(
+                  value: provider.autoSilence,
+                  onChanged: (v) => provider.setAutoSilence(v ?? false),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
             ),
           ]),
         ],
@@ -82,14 +101,14 @@ class ControlPanel extends StatelessWidget {
   }
 
   Widget _actionGroup(String title, List<Widget> children) {
-    return Row(children: children.map((c) => Padding(padding: EdgeInsets.symmetric(horizontal: 2), child: c)).toList());
+    return Row(children: children.map((c) => Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: c)).toList());
   }
 
   Widget _btn(String label, VoidCallback onTap, Color color) {
     return ElevatedButton(
-      style: ElevatedButton.styleFrom(backgroundColor: color, padding: EdgeInsets.symmetric(horizontal: 10)),
+      style: ElevatedButton.styleFrom(backgroundColor: color, padding: const EdgeInsets.symmetric(horizontal: 10)),
       onPressed: onTap,
-      child: Text(label, style: TextStyle(fontSize: 12)),
+      child: Text(label, style: const TextStyle(fontSize: 12)),
     );
   }
 
@@ -97,10 +116,10 @@ class ControlPanel extends StatelessWidget {
   void _dialogSilence(BuildContext context, SessionProvider prov) {
     final controller = TextEditingController(text: "1");
     showDialog(context: context, builder: (_) => AlertDialog(
-      title: Text("Ajouter un silence"),
+      title: const Text("Ajouter un silence"),
       content: TextField(
         controller: controller,
-        decoration: InputDecoration(labelText: "Longueur (1-10)"),
+        decoration: const InputDecoration(labelText: "Longueur (1-10)"),
         keyboardType: TextInputType.number,
       ),
       actions: [
@@ -112,7 +131,7 @@ class ControlPanel extends StatelessWidget {
               Navigator.pop(context);
             }
           },
-          child: Text("Ajouter"),
+          child: const Text("Ajouter"),
         )
       ],
     ));
@@ -121,7 +140,7 @@ class ControlPanel extends StatelessWidget {
   // Popup for removing Silence
   void _dialogRemoveSilence(BuildContext context, SessionProvider prov) {
     if (prov.session.isEmpty || !prov.session.last.isSilence) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erreur: La dernière tuile n'est pas un silence.")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Erreur: La dernière tuile n'est pas un silence.")));
       return;
     }
 
@@ -137,7 +156,7 @@ class ControlPanel extends StatelessWidget {
 
     final controller = TextEditingController(text: "1");
     showDialog(context: context, builder: (_) => AlertDialog(
-      title: Text("Supprimer Silence"),
+      title: const Text("Supprimer Silence"),
       content: TextField(
         controller: controller,
         decoration: InputDecoration(labelText: "Combien retirer ? (Max: $maxLen)"),
@@ -152,7 +171,7 @@ class ControlPanel extends StatelessWidget {
               Navigator.pop(context);
             }
           },
-          child: Text("Supprimer"),
+          child: const Text("Supprimer"),
         )
       ],
     ));
