@@ -66,8 +66,13 @@ class PianoKeyboard extends StatelessWidget {
   }
 
   Widget _buildKey(BuildContext context, int index, bool isBlack) {
+    final provider = Provider.of<SessionProvider>(context);
+    final isActive = provider.activeKeys.contains(index);
+
     return Material(
-      color: isBlack ? Colors.black : Colors.white,
+      color: isActive 
+          ? (isBlack ? Colors.blueAccent : Colors.lightGreenAccent) 
+          : (isBlack ? Colors.black : Colors.white),
       shape: RoundedRectangleBorder(
           side: BorderSide(color: Colors.black, width: 0.5),
           borderRadius: BorderRadius.only(
@@ -77,7 +82,7 @@ class PianoKeyboard extends StatelessWidget {
       ),
       child: InkWell(
         onTap: () {
-          Provider.of<SessionProvider>(context, listen: false).addNote(index, isBlack);
+          provider.addNote(index, isBlack);
         },
       ),
     );

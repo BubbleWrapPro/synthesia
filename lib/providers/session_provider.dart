@@ -3,35 +3,32 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter_midi_command/flutter_midi_command.dart';
 import '../models/note_model.dart';
 
 class SessionProvider with ChangeNotifier {
+  SessionProvider() {
+    initMidi();
+  }
+
   // State
   List<NoteModel> _session = [];
   bool _isChordMode = false;
   double _defaultHeight = 1.0;
   int _bpm = 60;
   bool _isPlaying = false;
+  final Set<int> _activeKeys = {};
 
   // Animation
-  double _animationScrollY = 0.0;
   Timer? _animTimer;
-
-  // NOUVELLES VARIABLES D'ANIMATION
-  // Au lieu de bouger tout le monde, on bouge seulement un groupe de notes actif
-  final List<NoteModel> _fallingNotes = []; // Les notes qui tombent actuellement
-  final double _fallingY = 0.0; // Leur position verticale
+  StreamSubscription? _midiSubscription;
 
   List<NoteModel> get session => _session;
   bool get isChordMode => _isChordMode;
   bool get isPlaying => _isPlaying;
   double get defaultHeight => _defaultHeight;
   int get bpm => _bpm;
-  double get animationScrollY => _animationScrollY;
-
-  // Getters pour la vue
-  List<NoteModel> get fallingNotes => _fallingNotes;
-  double get fallingY => _fallingY;
+  Set<int> get activeKeys => _activeKeys;
 
 
   // --- ACTIONS ---
@@ -84,10 +81,60 @@ class SessionProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void clearSession() { _session.clear(); _animationScrollY = 0; notifyListeners(); }
+  void clearSession() { _session.clear(); stopMusic(); notifyListeners(); }
   void toggleChordMode() { _isChordMode = !_isChordMode; notifyListeners(); }
   void setDefaultHeight(double h) { _defaultHeight = h; notifyListeners(); }
   void setBpm(int bpm) { _bpm = bpm.clamp(30, 240); notifyListeners(); }
+
+  // --- MIDI LOGIC ---
+
+  bool _isBlackKey(int index) {
+    int n = (index + 9) % 12;
+    return [1, 3, 6, 8, 10].contains(n);
+  }
+
+  void initMidi() async {
+    MidiCommand midiCommand = MidiCommand();
+
+    // Auto-connect to all available devices
+    List<MidiDevice>? devices = await midiCommand.devices;
+    if (devices != null) {
+      for (var device in devices) {
+        await midiCommand.connectToDevice(device);
+      }
+    }
+
+    // We listen to all incoming data from all connected devices
+    _midiSubscription?.cancel();
+    _midiSubscription = midiCommand.onMidiDataReceived?.listen((packet) {
+      final data = packet.data;
+      if (data.length < 3) return;
+
+      int status = data[0] & 0xF0;
+      int note = data[1];
+      int velocity = data[2];
+
+      int keyIndex = note - 21;
+      if (keyIndex < 0 || keyIndex >= 88) return;
+
+      if (status == 0x90 && velocity > 0) {
+        // Note On
+        _activeKeys.add(keyIndex);
+        Future.microtask(() => addNote(keyIndex, _isBlackKey(keyIndex)));
+      } else if (status == 0x80 || (status == 0x90 && velocity == 0)) {
+        // Note Off
+        _activeKeys.remove(keyIndex);
+        notifyListeners();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _midiSubscription?.cancel();
+    _animTimer?.cancel();
+    super.dispose();
+  }
 
   // --- LOGIQUE JOUER ---
   List<NoteModel> _activeFallingNotes = [];
@@ -102,82 +149,78 @@ class SessionProvider with ChangeNotifier {
     _activeFallingNotes = []; // Liste des notes en train de tomber
     notifyListeners();
 
-    // 1. Démarrer le moteur physique (le Timer qui fait tout descendre)
-    // Hauteur de la vue cascade (5/9 de l'écran)
-    double cascadeHeight = screenHeight * (5.0 / 9.0);
+    // La hauteur de la CascadeView est 6/9 de l'écran (flex 6 sur 9)
+    double cascadeViewHeight = screenHeight * (6.0 / 9.0);
+    // pixelRatio définit la hauteur d'une unité (1.0 height = 1/8 de l'écran)
     double pixelRatio = screenHeight / 8.0;
 
     // Vitesse : Pixels par milliseconde
     // Formule : (Hauteur d'1 temps en px) * (BPM / 60) / 1000 ms
+    // À 60 BPM, la note parcourt son "pixelRatio" en 1000ms.
     double pixelsPerMs = (pixelRatio * (_bpm / 60.0)) / 1000.0;
 
-    // Le Timer tourne à 60fps (toutes les 16ms)
+    bool injectionDone = false;
+
     _animTimer?.cancel();
     _animTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
-      if (_activeFallingNotes.isEmpty && !_isPlaying) {
+      // Si l'utilisateur a arrêté manuellement
+      if (!_isPlaying) {
         timer.cancel();
         return;
       }
 
       // Faire descendre toutes les notes actives
-      // On modifie une propriété temporaire 'currentOffset' qu'on détourne pour servir de position Y
-      // ATTENTION : Pour l'affichage, currentOffset servira ici de "Bottom Position"
-      for (var note in _activeFallingNotes) {
-        note.currentOffset -= (pixelsPerMs * 16.0); // Elle descend
+      // On utilise une copie de la liste pour éviter les erreurs de modification concurrente
+      final notes = List<NoteModel>.from(_activeFallingNotes);
+      for (var note in notes) {
+        note.currentOffset -= (pixelsPerMs * 16.0);
       }
 
-      // Nettoyage : Supprimer les notes qui sont passées sous le clavier
+      // Nettoyage : Supprimer les notes qui sont passées sous le clavier (offset + hauteur < 0)
       _activeFallingNotes.removeWhere((n) => n.currentOffset + (n.height * pixelRatio) < 0);
+
+      // Si l'injection est finie et que tout est tombé, on arrête proprement
+      if (injectionDone && _activeFallingNotes.isEmpty) {
+        _isPlaying = false;
+        timer.cancel();
+      }
 
       notifyListeners();
     });
 
-    // 2. L'Injecteur de notes (Le chef d'orchestre)
-    // On parcourt la session dans l'ordre d'enregistrement (0 = première note jouée)
-    // Contrairement à la vue statique, ici on veut jouer 0, puis 1, puis 2...
-
-    for (var note in _session) {
+    // Injecteur de notes
+    for (int i = 0; i < _session.length; i++) {
       if (!_isPlaying) break;
 
-      // Créer une COPIE de la note pour l'animation (pour ne pas casser la sauvegarde)
+      final note = _session[i];
+
+      // On crée une copie pour l'animation
       NoteModel fallingNote = NoteModel(
         keyIndex: note.keyIndex,
         height: note.height,
         color: note.color,
         chordId: note.chordId,
         isSilence: note.isSilence,
-        // Position de départ : Tout en haut de la cascade
-        currentOffset: cascadeHeight,
+        currentOffset: cascadeViewHeight, // Départ au sommet de la vue
       );
 
-      // Ajouter à la liste visible
       if (!fallingNote.isSilence) {
         _activeFallingNotes.add(fallingNote);
       }
 
-      // CALCUL DU DELAI AVANT LA PROCHAINE NOTE
-      // C'est ici que la magie opère. On attend la DUREE de la note actuelle.
-      // Durée en ms = (60000 / BPM) * HauteurNote
+      // Délai avant la prochaine note : (60000 / BPM) * HauteurNote
+      // À 60 BPM, une note de hauteur 1.0 dure exactement 1000ms.
       int durationMs = ((60000 / _bpm) * note.height).round();
 
-      // Gestion des ACCORDS : Si la prochaine note a le même ID, on n'attend pas !
-      int currentIndex = _session.indexOf(note);
-      int nextIndex = currentIndex + 1;
-      bool isNextChordPart = false;
-      if (nextIndex < _session.length) {
-        if (_session[nextIndex].chordId == note.chordId) {
-          isNextChordPart = true;
-        }
-      }
+      // Gestion des ACCORDS : si la suivante a le même ID, on l'injecte simultanément
+      bool isNextChordPart = (i + 1 < _session.length) && (_session[i + 1].chordId == note.chordId);
 
       if (!isNextChordPart) {
         await Future.delayed(Duration(milliseconds: durationMs));
       }
     }
 
-    // Fin de la chanson, mais on laisse les dernières notes finir de tomber
-    await Future.delayed(Duration(seconds: 5)); // Marge de sécurité
-    stopMusic();
+    injectionDone = true;
   }
 
   void stopMusic() {
