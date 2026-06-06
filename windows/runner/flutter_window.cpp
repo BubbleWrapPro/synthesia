@@ -59,6 +59,25 @@ bool FlutterWindow::OnCreate() {
           flutter_controller_->engine()->messenger(), "com.synthesia.midi",
           &flutter::StandardMethodCodec::GetInstance());
 
+  channel_->SetMethodCallHandler(
+      [this](const auto& call, auto result) {
+        if (call.method_name().compare("setWindowTitle") == 0) {
+          const auto* arguments = std::get_if<std::string>(call.arguments());
+          if (arguments) {
+            std::string title = *arguments;
+            int size_needed = MultiByteToWideChar(CP_UTF8, 0, title.c_str(), (int)title.size(), NULL, 0);
+            std::wstring wtitle(size_needed, 0);
+            MultiByteToWideChar(CP_UTF8, 0, title.c_str(), (int)title.size(), &wtitle[0], size_needed);
+            SetWindowText(GetHandle(), wtitle.c_str());
+            result->Success();
+          } else {
+            result->Error("Bad Arguments", "Expected a string");
+          }
+        } else {
+          result->NotImplemented();
+        }
+      });
+
   // Start listening to the Piano
   StartMidiInput();
 

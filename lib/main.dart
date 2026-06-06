@@ -29,10 +29,25 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Synthesia Flutter',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const HomeScreen(),
+    // Le Consumer ici est vital : il force le rebuild de MaterialApp
+    // quand currentFileName change dans le provider.
+    return Consumer<SessionProvider>(
+      builder: (context, provider, child) {
+        final String windowTitle = provider.currentFileName.isEmpty
+            ? 'synthesia'
+            : 'synthesia - ${provider.currentFileName}';
+
+        return MaterialApp(
+          title: windowTitle,
+          theme: ThemeData(primarySwatch: Colors.blue),
+          // Title widget force la mise à jour au niveau de l'OS (Desktop)
+          home: Title(
+            title: windowTitle,
+            color: Colors.blue,
+            child: const HomeScreen(),
+          ),
+        );
+      },
     );
   }
 }

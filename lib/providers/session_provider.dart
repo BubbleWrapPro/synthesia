@@ -27,6 +27,7 @@ class SessionProvider with ChangeNotifier {
 
   // --- VARIABLES D'ÉTAT ---
   List<NoteModel> _session = [];
+  String _currentFileName = ""; // [NEW] Stocke le nom du fichier chargé
   bool _isChordMode = false;
   double _defaultHeight = 1.0;
   int _bpm = 60;
@@ -56,6 +57,7 @@ class SessionProvider with ChangeNotifier {
 
   // --- GETTERS ---
   List<NoteModel> get session => _session;
+  String get currentFileName => _currentFileName;
   bool get isChordMode => _isChordMode;
   bool get isPlaying => _isPlaying;
   double get defaultHeight => _defaultHeight;
@@ -244,9 +246,33 @@ class SessionProvider with ChangeNotifier {
 
   void clearSession() {
     _session.clear();
+    _currentFileName = "";
     _animationScrollY = 0;
+    _updateSystemTitle(); // [NEW] Force OS title update
     stopRecordingLoop(); // Sécurité
     notifyListeners();
+  }
+
+  void _updateSystemTitle() {
+    final String windowTitle = _currentFileName.isEmpty
+        ? 'synthesia'
+        : 'synthesia - $_currentFileName';
+
+    // 1. Flutter side update (Task switcher, Alt-Tab)
+    SystemChrome.setApplicationSwitcherDescription(
+      ApplicationSwitcherDescription(
+        label: windowTitle,
+        primaryColor: Colors.blue.value,
+      ),
+    );
+
+    // 2. Native Windows update (Actual title bar)
+    // We use the existing MIDI channel to send a custom command to our C++ code
+    try {
+      _midiChannel.invokeMethod('setWindowTitle', windowTitle);
+    } catch (e) {
+      debugPrint("Native title update failed: $e");
+    }
   }
 
   void toggleChordMode() { _isChordMode = !_isChordMode; notifyListeners(); }
@@ -382,6 +408,8 @@ class SessionProvider with ChangeNotifier {
         }
 
         _session = rawNotes;
+        _currentFileName = file.name; // Stocker le nom du fichier
+        _updateSystemTitle(); // [NEW] Force OS title update
         notifyListeners();
 
       } catch (e) {
