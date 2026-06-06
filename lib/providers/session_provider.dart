@@ -29,7 +29,7 @@ class SessionProvider with ChangeNotifier {
   List<NoteModel> _session = [];
   bool _isChordMode = false;
   double _defaultHeight = 1.0;
-  int _bpm = 120;
+  int _bpm = 60;
   bool _isPlaying = false;
 
   // Option "Silence Automatique"
@@ -105,7 +105,7 @@ class SessionProvider with ChangeNotifier {
       keyIndex: keyIndex,
       height: 0.01,
       color: isBlack ? Colors.blue : Colors.lightGreen,
-      chordId: DateTime.now().toIso8601String(),
+      chordId: _currentMidiChordId, // Utilise l'ID intelligent (Fix 1)
       currentOffset: 0.0, // Elle apparaît tout en bas (le présent)
       fromMidi: true, // [NEW] Marqueur
     );
@@ -370,21 +370,15 @@ class SessionProvider with ChangeNotifier {
         List<dynamic> jsonList = jsonDecode(content);
         List<NoteModel> rawNotes = jsonList.map((e) => NoteModel.fromJson(e)).toList();
 
-        // Recalcul des positions pour l'affichage statique "empilé"
-        double accumulatedOffset = 0.0;
-        for (int i = rawNotes.length - 1; i >= 0; i--) {
-          NoteModel currentNote = rawNotes[i];
-          currentNote.currentOffset = accumulatedOffset;
+        // 1. Détection du type de morceau
+        bool isMidiSong = rawNotes.any((n) => n.fromMidi);
 
-          bool isChordWithNext = false;
-          if (i > 0) {
-            if (rawNotes[i-1].chordId == currentNote.chordId) {
-              isChordWithNext = true;
-            }
-          }
-          if (!isChordWithNext) {
-            accumulatedOffset += currentNote.height;
-          }
+        if (isMidiSong) {
+          // 2a. Reconstitution précise pour le MIDI (via Timestamps)
+          _reconstructMidiOffsets(rawNotes);
+        } else {
+          // 2b. Reconstitution par empilement pour le mode manuel
+          _reconstructManualOffsets(rawNotes);
         }
 
         _session = rawNotes;
@@ -392,6 +386,73 @@ class SessionProvider with ChangeNotifier {
 
       } catch (e) {
         debugPrint("Erreur import: $e");
+      }
+    }
+  }
+
+  /// Reconstruit les positions (offsets) en utilisant les timestamps MIDI
+  void _reconstructMidiOffsets(List<NoteModel> notes) {
+    if (notes.isEmpty) return;
+
+    // Tenter de parser les chordId comme des dates
+    List<DateTime?> times = notes.map((n) => DateTime.tryParse(n.chordId)).toList();
+
+    // Si on n'arrive pas à parser les dates, on fallback sur le manuel
+    if (times.any((t) => t == null)) {
+      _reconstructManualOffsets(notes);
+      return;
+    }
+
+    // Trier par date pour être sûr de l'ordre chronologique
+    // On utilise une liste d'index pour trier en même temps les notes et les dates
+    var combined = List.generate(notes.length, (i) => i);
+    combined.sort((a, b) => times[a]!.compareTo(times[b]!));
+
+    List<NoteModel> sortedNotes = combined.map((i) => notes[i]).toList();
+    List<DateTime> sortedTimes = combined.map((i) => times[i]!).toList();
+
+    notes.clear();
+    notes.addAll(sortedNotes);
+
+    DateTime firstTime = sortedTimes[0];
+    double msPerBeat = 60000.0 / _bpm;
+
+    // Trouver le moment de fin global pour définir le "bas" du morceau
+    double maxEndTimeMs = 0;
+    List<double> startTimesMs = [];
+    for (int i = 0; i < notes.length; i++) {
+      double startMs = sortedTimes[i].difference(firstTime).inMilliseconds.toDouble();
+      startTimesMs.add(startMs);
+      double endMs = startMs + (notes[i].height * msPerBeat);
+      if (endMs > maxEndTimeMs) maxEndTimeMs = endMs;
+    }
+
+    // Calculer les offsets : plus la note est au début, plus elle est haute (grand offset)
+    for (int i = 0; i < notes.length; i++) {
+      double startMs = startTimesMs[i];
+      // On veut que la note qui finit en dernier soit à l'offset 0 (ou presque)
+      // currentTop = (MaxEnd - Start) / msPerBeat
+      double currentTop = (maxEndTimeMs - startMs) / msPerBeat;
+      notes[i].currentOffset = currentTop - notes[i].height;
+      if (notes[i].currentOffset < 0) notes[i].currentOffset = 0;
+    }
+  }
+
+  /// Reconstruit les positions par empilement simple (Mode Manuel)
+  void _reconstructManualOffsets(List<NoteModel> notes) {
+    double accumulatedOffset = 0.0;
+    for (int i = notes.length - 1; i >= 0; i--) {
+      NoteModel currentNote = notes[i];
+      currentNote.currentOffset = accumulatedOffset;
+
+      bool isChordWithNext = false;
+      if (i > 0) {
+        if (notes[i - 1].chordId == currentNote.chordId) {
+          isChordWithNext = true;
+        }
+      }
+      if (!isChordWithNext) {
+        accumulatedOffset += currentNote.height;
       }
     }
   }
