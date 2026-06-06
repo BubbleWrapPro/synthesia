@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter_midi_command/flutter_midi_command.dart';
 import '../models/note_model.dart';
 import 'package:flutter/services.dart';
 
@@ -32,6 +33,7 @@ class SessionProvider with ChangeNotifier {
   double _defaultHeight = 1.0;
   int _bpm = 60;
   bool _isPlaying = false;
+  final Set<int> _activeKeys = {};
 
   // Option "Silence Automatique"
   // false = Le défilement s'arrête si aucune note n'est pressée (Mode "Pas à pas")
@@ -299,7 +301,8 @@ class SessionProvider with ChangeNotifier {
 
     _animTimer?.cancel();
     _animTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
-      if (_activeFallingNotes.isEmpty && !_isPlaying) {
+      // Si l'utilisateur a arrêté manuellement
+      if (!_isPlaying) {
         timer.cancel();
         return;
       }
@@ -310,6 +313,12 @@ class SessionProvider with ChangeNotifier {
 
       // Nettoyage : Supprimer les notes passées sous le clavier
       _activeFallingNotes.removeWhere((n) => n.currentOffset + (n.height * pixelRatio) < 0);
+
+      // Si l'injection est finie et que tout est tombé, on arrête proprement
+      if (injectionDone && _activeFallingNotes.isEmpty) {
+        _isPlaying = false;
+        timer.cancel();
+      }
 
       notifyListeners();
     });

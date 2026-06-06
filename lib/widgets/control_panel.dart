@@ -21,6 +21,7 @@ class ControlPanel extends StatelessWidget {
             _btn("Effacer", () => provider.clearSession(), Colors.redAccent),
             _btn("Sauvegarder (S)", () => provider.saveToFile(), Colors.orange),
             _btn("Importer (O)", () => provider.importFile(), Colors.orange),
+            _btn("MIDI ↻", () => provider.initMidi(), Colors.blueGrey),
           ]),
 
           const VerticalDivider(width: 20),
