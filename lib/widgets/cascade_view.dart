@@ -26,15 +26,6 @@ class CascadeView extends StatelessWidget {
           // 1. Draw Grid Lines (Octave separators)
           // Octave width = 7 white keys
           for(int i=1; i<8; i++) {
-            // 7 white keys * width + offset for A0, B0 (2 keys)
-            // DO NOT DELETE EVEN IF NOT USED I DON'T KNOW WHY BUT IT CRASHES FLUTTER BUILD
-            double left = (2 * whiteKeyWidth) + ((i - 1) * 7 * whiteKeyWidth);
-            if (i == 1) {
-              left = 2 * whiteKeyWidth; // Correction for first octave start
-            } else {
-              left = (2 * whiteKeyWidth) + ((i - 1) * 7 * whiteKeyWidth);
-            }
-
             // Simplification: Just draw lines every 7 * whiteKeyWidth starting after A0/B0
             // Ideally, align with C1, C2, etc.
             double cPos = (2 * whiteKeyWidth) + ((i -1) * 7 * whiteKeyWidth);
@@ -86,9 +77,9 @@ class CascadeView extends StatelessWidget {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        note.color.withOpacity(0.9),
+                        note.color.withValues(alpha: 0.9),
                         note.color,
-                        note.color.withOpacity(0.85),
+                        note.color.withValues(alpha: 0.85),
                       ],
                       stops: const [0.0, 0.4, 1.0],
                     ),
@@ -103,7 +94,7 @@ class CascadeView extends StatelessWidget {
                       height: 1.5,
                       width: double.infinity,
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.4),
+                        color: Colors.black.withValues(alpha: 0.4),
                         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(1.5)),
                       ),
                     ),

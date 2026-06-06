@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
-import 'package:flutter_midi_command/flutter_midi_command.dart';
 import '../models/note_model.dart';
 import 'package:flutter/services.dart';
 
@@ -19,11 +18,21 @@ class SessionProvider with ChangeNotifier {
   void _initMidiListener() {
     _midiChannel.setMethodCallHandler((call) async {
       if (call.method == "onNoteOn") {
-        _handleMidiNoteOn(call.arguments as int);
+        int note = call.arguments as int;
+        _activeKeys.add(note - 21); // Logic for PianoKeyboard feedback
+        _handleMidiNoteOn(note);
       } else if (call.method == "onNoteOff") {
-        _handleMidiNoteOff(call.arguments as int);
+        int note = call.arguments as int;
+        _activeKeys.remove(note - 21); // Logic for PianoKeyboard feedback
+        _handleMidiNoteOff(note);
       }
     });
+  }
+
+  void initMidi() {
+    // This can be used to re-sync or re-init if needed
+    _initMidiListener();
+    notifyListeners();
   }
 
   // --- VARIABLES D'ÉTAT ---
@@ -34,6 +43,7 @@ class SessionProvider with ChangeNotifier {
   int _bpm = 60;
   bool _isPlaying = false;
   final Set<int> _activeKeys = {};
+  bool _injectionDone = false; // [NEW] Flag to track sequencer completion
 
   // Option "Silence Automatique"
   // false = Le défilement s'arrête si aucune note n'est pressée (Mode "Pas à pas")
@@ -62,6 +72,7 @@ class SessionProvider with ChangeNotifier {
   String get currentFileName => _currentFileName;
   bool get isChordMode => _isChordMode;
   bool get isPlaying => _isPlaying;
+  Set<int> get activeKeys => _activeKeys; // [NEW] Expose active keys for PianoKeyboard
   double get defaultHeight => _defaultHeight;
   int get bpm => _bpm;
   double get animationScrollY => _animationScrollY;
@@ -264,7 +275,7 @@ class SessionProvider with ChangeNotifier {
     SystemChrome.setApplicationSwitcherDescription(
       ApplicationSwitcherDescription(
         label: windowTitle,
-        primaryColor: Colors.blue.value,
+        primaryColor: Colors.blue.toARGB32(),
       ),
     );
 
@@ -315,7 +326,7 @@ class SessionProvider with ChangeNotifier {
       _activeFallingNotes.removeWhere((n) => n.currentOffset + (n.height * pixelRatio) < 0);
 
       // Si l'injection est finie et que tout est tombé, on arrête proprement
-      if (injectionDone && _activeFallingNotes.isEmpty) {
+      if (_injectionDone && _activeFallingNotes.isEmpty) {
         _isPlaying = false;
         timer.cancel();
       }
@@ -323,6 +334,7 @@ class SessionProvider with ChangeNotifier {
       notifyListeners();
     });
 
+    _injectionDone = false;
     // 2. Injecteur de notes (Sequencer)
     for (int i = 0; i < _session.length; i++) {
       if (!_isPlaying) break;
@@ -372,8 +384,9 @@ class SessionProvider with ChangeNotifier {
       }
     }
 
-    await Future.delayed(const Duration(seconds: 3));
-    stopMusic();
+    _injectionDone = true;
+    // On attend un peu pour laisser les dernières notes tomber avant d'arrêter
+    // Mais le timer s'en occupe déjà avec le flag injectionDone
   }
 
   void stopMusic() {

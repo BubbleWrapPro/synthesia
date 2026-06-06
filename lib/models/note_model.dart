@@ -25,7 +25,7 @@ class NoteModel {
   Map<String, dynamic> toJson() => {
     'keyIndex': keyIndex,
     'height': height,
-    'color': color.value,
+    'color': color.toARGB32(),
     'chordId': chordId,
     'isSilence': isSilence,
     'fromMidi': fromMidi,
