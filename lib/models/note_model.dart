@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 class NoteModel {
+  final String id;          // [NEW] Unique ID for reliable lookups
   final int keyIndex;       // 0 to 87 (Which piano key)
   double height;            // Duration/Height of the rect
   final Color color;        // Green (white key) or Blue (black key)
@@ -13,6 +14,7 @@ class NoteModel {
   double currentOffset;
 
   NoteModel({
+    String? id,
     required this.keyIndex,
     required this.height,
     required this.color,
@@ -21,10 +23,11 @@ class NoteModel {
     this.isSilence = false,
     this.fromMidi = false, // Default false
     this.currentOffset = 0.0,
-  });
+  }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString() + keyIndex.toString();
 
   // Convert to JSON
   Map<String, dynamic> toJson() => {
+    'id': id,
     'keyIndex': keyIndex,
     'height': height,
     'color': color.toARGB32(),
@@ -37,6 +40,7 @@ class NoteModel {
   // Create from JSON
   factory NoteModel.fromJson(Map<String, dynamic> json) {
     return NoteModel(
+      id: json['id'],
       keyIndex: json['keyIndex'],
       height: json['height'],
       color: Color(json['color']),
@@ -46,4 +50,12 @@ class NoteModel {
       fromMidi: json['fromMidi'] ?? false,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is NoteModel && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 }

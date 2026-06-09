@@ -175,6 +175,7 @@ class SessionProvider with ChangeNotifier {
           // Note : Comme 'height' est final dans votre modèle, on doit remplacer l'objet
           // Si vous avez retiré 'final' devant height dans NoteModel, vous pouvez faire note.height += speed;
           NoteModel grownNote = NoteModel(
+            id: note.id,
             keyIndex: note.keyIndex,
             height: note.height + speed, // Elle grandit
             color: note.color,
@@ -345,6 +346,7 @@ class SessionProvider with ChangeNotifier {
 
       // 1. Lancer la note visuelle
       NoteModel fallingNote = NoteModel(
+        id: note.id,
         keyIndex: note.keyIndex,
         height: note.height,
         color: note.color,
@@ -511,10 +513,11 @@ class SessionProvider with ChangeNotifier {
   }
 
   // Helpers pour l'édition
-  void updateNote(NoteModel note, double newH, Color newC) {
+  void updateNote(NoteModel note, double newH, Color? newC) {
     int idx = _session.indexOf(note);
     if(idx == -1) return;
     _session[idx] = NoteModel(
+        id: note.id,
         keyIndex: note.keyIndex, 
         height: newH, 
         color: note.color,

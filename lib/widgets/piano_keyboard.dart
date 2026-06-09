@@ -19,8 +19,10 @@ class PianoKeyboard extends StatelessWidget {
         final double blackKeyWidth = whiteKeyWidth * 0.6;
         final double blackKeyHeight = constraints.maxHeight * 0.6;
 
-        List<Widget> baseKeys = [];
-        List<Widget> activeOverlays = [];
+        List<Widget> whiteBase = [];
+        List<Widget> blackBase = [];
+        List<Widget> whiteOverlays = [];
+        List<Widget> blackOverlays = [];
 
         int whiteKeyCounter = 0;
         for (int i = 0; i < 88; i++) {
@@ -34,39 +36,52 @@ class PianoKeyboard extends StatelessWidget {
             width = whiteKeyWidth;
             whiteKeyCounter++;
           } else {
+            // Black key is centered on the line between current white key gap
             left = (whiteKeyCounter * whiteKeyWidth) - (blackKeyWidth / 2);
             width = blackKeyWidth;
             height = blackKeyHeight;
           }
 
-          // 1. Base Key (The physical key)
-          baseKeys.add(Positioned(
+          final keyWidget = Positioned(
             left: left,
             top: 0,
             bottom: height == null ? 0 : null,
             height: height,
             width: width,
             child: _buildBaseKey(context, i, isBlack, provider),
-          ));
+          );
+
+          if (isBlack) {
+            blackBase.add(keyWidget);
+          } else {
+            whiteBase.add(keyWidget);
+          }
 
           // 2. Active Overlay (The "Pressed" visual)
           Color? activeColor = _getActiveColor(i, provider, style);
           if (activeColor != null) {
-            activeOverlays.add(Positioned(
+            final overlayWidget = Positioned(
               left: left,
               top: 0,
               bottom: height == null ? 0 : null,
               height: height,
               width: width,
               child: _buildActiveOverlay(activeColor, config),
-            ));
+            );
+            if (isBlack) {
+              blackOverlays.add(overlayWidget);
+            } else {
+              whiteOverlays.add(overlayWidget);
+            }
           }
         }
 
-        Widget activeLayer = Stack(children: activeOverlays);
+        // Layering: White keys (base + overlay) then Black keys (base + overlay)
+        // This ensures black keys are never covered by white keys.
+        Widget activeLayer = Stack(children: [...whiteOverlays, ...blackOverlays]);
 
         // Apply Global Gradient to active layer if enabled
-        if (config.useGradient && activeOverlays.isNotEmpty) {
+        if (config.useGradient && (whiteOverlays.isNotEmpty || blackOverlays.isNotEmpty)) {
           double angleRad = (config.gradientAngle - 90) * 3.14159 / 180;
           activeLayer = ShaderMask(
             shaderCallback: (bounds) {
@@ -85,7 +100,8 @@ class PianoKeyboard extends StatelessWidget {
           color: Colors.grey[900],
           child: Stack(
             children: [
-              ...baseKeys,
+              ...whiteBase,
+              ...blackBase,
               activeLayer,
             ],
           ),

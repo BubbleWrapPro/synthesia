@@ -42,7 +42,9 @@ class CascadeView extends StatelessWidget {
 
           // 2. Draw Notes
           List<NoteModel> notesToDraw = provider.isPlaying ? provider.activeFallingNotes : session;
-          List<Widget> noteWidgets = [];
+          List<Widget> maskedNotes = [];
+          List<Widget> unmaskedNotes = [];
+          List<Widget> bottomBars = [];
 
           for (var note in notesToDraw) {
             if (note.isSilence && !provider.isPlaying) continue; 
@@ -57,9 +59,10 @@ class CascadeView extends StatelessWidget {
 
             if (bottomPos > constraints.maxHeight) continue;
 
+            bool hasOverride = note.overrideColor != null;
             Color noteColor = note.overrideColor ?? style.getColorForNote(note.keyIndex);
 
-            noteWidgets.add(Positioned(
+            final noteTile = Positioned(
               left: left,
               bottom: bottomPos,
               width: width,
@@ -69,7 +72,7 @@ class CascadeView extends StatelessWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     color: noteColor,
-                    gradient: config.useGradient ? null : LinearGradient(
+                    gradient: (config.useGradient && !hasOverride) ? null : LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
@@ -82,27 +85,39 @@ class CascadeView extends StatelessWidget {
                     border: Border.all(color: Colors.white24, width: 0.5),
                     borderRadius: BorderRadius.circular(1.5),
                   ),
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Container(
-                      height: 1.5,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(1.5)),
-                      ),
-                    ),
+                ),
+              ),
+            );
+
+            // Separate notes for masking
+            if (config.useGradient && !hasOverride) {
+              maskedNotes.add(noteTile);
+            } else {
+              unmaskedNotes.add(noteTile);
+            }
+
+            // Always add a bottom bar on top of everything to ensure separation
+            bottomBars.add(Positioned(
+              left: left,
+              bottom: bottomPos,
+              width: width,
+              child: IgnorePointer(
+                child: Container(
+                  height: 2.0, // Slightly thicker for better visibility
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.8), // Darker for contrast
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(1.5)),
                   ),
                 ),
               ),
             ));
           }
 
-          Widget stackContent = Stack(children: noteWidgets);
+          Widget maskedLayer = Stack(children: maskedNotes);
 
-          if (config.useGradient) {
+          if (config.useGradient && maskedNotes.isNotEmpty) {
             double angleRad = (config.gradientAngle - 90) * 3.14159 / 180;
-            stackContent = ShaderMask(
+            maskedLayer = ShaderMask(
               shaderCallback: (bounds) {
                 return LinearGradient(
                   begin: Alignment(math.cos(angleRad + 3.14159), math.sin(angleRad + 3.14159)),
@@ -111,11 +126,15 @@ class CascadeView extends StatelessWidget {
                 ).createShader(bounds);
               },
               blendMode: BlendMode.srcIn,
-              child: stackContent,
+              child: maskedLayer,
             );
           }
 
-          tiles.add(Positioned.fill(child: stackContent));
+          tiles.add(Positioned.fill(child: Stack(children: [
+            maskedLayer,
+            ...unmaskedNotes,
+            ...bottomBars,
+          ])));
 
           return Stack(children: tiles);
         },
@@ -168,13 +187,21 @@ class CascadeView extends StatelessWidget {
               _colorBtn(context, note, Colors.red, prov),
               _colorBtn(context, note, Colors.yellow, prov),
             ],
-          )
+          ),
+          if (note.overrideColor != null)
+            TextButton(
+              onPressed: () {
+                prov.updateNote(note, note.height, null);
+                Navigator.pop(context);
+              },
+              child: const Text("Réinitialiser la couleur"),
+            ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: () {
-            prov.deleteNote(note); // Helper to be added in Provider
+            prov.deleteNote(note); 
             Navigator.pop(context);
           },
           child: Text("Supprimer", style: TextStyle(color: Colors.red)),
@@ -182,7 +209,7 @@ class CascadeView extends StatelessWidget {
         TextButton(
           onPressed: () {
             double? newH = double.tryParse(heightCtrl.text);
-            if(newH != null) prov.updateNote(note, newH, note.color);
+            if(newH != null) prov.updateNote(note, newH, note.overrideColor);
             Navigator.pop(context);
           },
           child: Text("Valider"),
