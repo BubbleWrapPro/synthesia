@@ -41,7 +41,7 @@ class ControlPanel extends StatelessWidget {
             ]),
             const SizedBox(width: 10),
 
-            // Hauteur Defaut
+            // Hauteur Défaut
             SizedBox(
               width: 50,
               child: TextField(

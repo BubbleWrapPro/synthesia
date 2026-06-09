@@ -32,7 +32,7 @@ class CustomizationPage extends StatelessWidget {
               children: [
                 _sectionTitle("Différenciation"),
                 DropdownButtonFormField<DifferentiationMode>(
-                  value: config.mode,
+                  initialValue: config.mode,
                   decoration: const InputDecoration(labelText: "Mode"),
                   items: DifferentiationMode.values.map((m) {
                     return DropdownMenuItem(

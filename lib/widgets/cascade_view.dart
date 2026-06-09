@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/style_provider.dart';
 import '../models/note_model.dart';
-import '../models/style_config.dart';
 
 class CascadeView extends StatelessWidget {
   const CascadeView({super.key});
