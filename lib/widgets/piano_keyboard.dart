@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/session_provider.dart';
+import '../providers/style_provider.dart';
 
 class PianoKeyboard extends StatelessWidget {
   const PianoKeyboard({super.key});
@@ -67,11 +68,12 @@ class PianoKeyboard extends StatelessWidget {
 
   Widget _buildKey(BuildContext context, int index, bool isBlack) {
     final provider = Provider.of<SessionProvider>(context);
+    final style = Provider.of<StyleProvider>(context);
     final isActive = provider.activeKeys.contains(index);
 
     return Material(
       color: isActive 
-          ? (isBlack ? Colors.blueAccent : Colors.lightGreenAccent) 
+          ? style.getColorForNote(index)
           : (isBlack ? Colors.black : Colors.white),
       shape: RoundedRectangleBorder(
           side: BorderSide(color: Colors.black, width: 0.5),

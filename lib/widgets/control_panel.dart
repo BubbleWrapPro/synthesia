@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/session_provider.dart';
+import '../pages/customization_page.dart';
 
 class ControlPanel extends StatelessWidget {
   const ControlPanel({super.key});
@@ -94,6 +95,15 @@ class ControlPanel extends StatelessWidget {
                 ),
               ],
             ),
+          ]),
+
+          const VerticalDivider(width: 20),
+
+          // 5. Apparence
+          _actionGroup("Apparence", [
+            _btn("Style (T)", () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomizationPage()));
+            }, Colors.purple),
           ]),
         ],
       ),

@@ -178,6 +178,7 @@ class SessionProvider with ChangeNotifier {
             keyIndex: note.keyIndex,
             height: note.height + speed, // Elle grandit
             color: note.color,
+            overrideColor: note.overrideColor,
             chordId: note.chordId,
             isSilence: note.isSilence,
             currentOffset: 0.0, // Reste ancrée en bas
@@ -224,6 +225,7 @@ class SessionProvider with ChangeNotifier {
       color: isBlackKey ? Colors.blue : Colors.lightGreen,
       chordId: cId,
       fromMidi: false,
+      currentOffset: 0.0,
     );
 
     // En mode manuel sans accord, on pousse les autres vers le haut
@@ -512,8 +514,12 @@ class SessionProvider with ChangeNotifier {
     int idx = _session.indexOf(note);
     if(idx == -1) return;
     _session[idx] = NoteModel(
-        keyIndex: note.keyIndex, height: newH, color: newC,
-        chordId: note.chordId, isSilence: note.isSilence,
+        keyIndex: note.keyIndex, 
+        height: newH, 
+        color: note.color,
+        overrideColor: newC,
+        chordId: note.chordId, 
+        isSilence: note.isSilence,
         currentOffset: note.currentOffset,
         fromMidi: note.fromMidi
     );
