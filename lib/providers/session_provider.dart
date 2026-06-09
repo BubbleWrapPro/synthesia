@@ -175,9 +175,11 @@ class SessionProvider with ChangeNotifier {
           // Note : Comme 'height' est final dans votre modèle, on doit remplacer l'objet
           // Si vous avez retiré 'final' devant height dans NoteModel, vous pouvez faire note.height += speed;
           NoteModel grownNote = NoteModel(
+            id: note.id,
             keyIndex: note.keyIndex,
             height: note.height + speed, // Elle grandit
             color: note.color,
+            overrideColor: note.overrideColor,
             chordId: note.chordId,
             isSilence: note.isSilence,
             currentOffset: 0.0, // Reste ancrée en bas
@@ -224,6 +226,7 @@ class SessionProvider with ChangeNotifier {
       color: isBlackKey ? Colors.blue : Colors.lightGreen,
       chordId: cId,
       fromMidi: false,
+      currentOffset: 0.0,
     );
 
     // En mode manuel sans accord, on pousse les autres vers le haut
@@ -343,9 +346,11 @@ class SessionProvider with ChangeNotifier {
 
       // 1. Lancer la note visuelle
       NoteModel fallingNote = NoteModel(
+        id: note.id,
         keyIndex: note.keyIndex,
         height: note.height,
         color: note.color,
+        overrideColor: note.overrideColor,
         chordId: note.chordId,
         isSilence: note.isSilence,
         currentOffset: cascadeHeight,
@@ -508,12 +513,17 @@ class SessionProvider with ChangeNotifier {
   }
 
   // Helpers pour l'édition
-  void updateNote(NoteModel note, double newH, Color newC) {
+  void updateNote(NoteModel note, double newH, Color? newC) {
     int idx = _session.indexOf(note);
     if(idx == -1) return;
     _session[idx] = NoteModel(
-        keyIndex: note.keyIndex, height: newH, color: newC,
-        chordId: note.chordId, isSilence: note.isSilence,
+        id: note.id,
+        keyIndex: note.keyIndex, 
+        height: newH, 
+        color: note.color,
+        overrideColor: newC,
+        chordId: note.chordId, 
+        isSilence: note.isSilence,
         currentOffset: note.currentOffset,
         fromMidi: note.fromMidi
     );

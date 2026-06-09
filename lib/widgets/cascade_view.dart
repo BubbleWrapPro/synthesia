@@ -1,6 +1,8 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/session_provider.dart';
+import '../providers/style_provider.dart';
 import '../models/note_model.dart';
 
 class CascadeView extends StatelessWidget {
@@ -13,7 +15,9 @@ class CascadeView extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final provider = Provider.of<SessionProvider>(context);
+          final style = Provider.of<StyleProvider>(context);
           final session = provider.session;
+          final config = style.currentConfig;
 
           // Geometry constants matching PianoKeyboard
           final double whiteKeyWidth = constraints.maxWidth / 52;
@@ -38,71 +42,99 @@ class CascadeView extends StatelessWidget {
 
           // 2. Draw Notes
           List<NoteModel> notesToDraw = provider.isPlaying ? provider.activeFallingNotes : session;
+          List<Widget> maskedNotes = [];
+          List<Widget> unmaskedNotes = [];
+          List<Widget> bottomBars = [];
 
           for (var note in notesToDraw) {
-            if (note.isSilence && !provider.isPlaying) continue; // On n'affiche pas les silences en edit? (Optionnel)
-            if (note.isSilence && provider.isPlaying) continue;  // On n'affiche pas les silences en jeu
+            if (note.isSilence && !provider.isPlaying) continue; 
+            if (note.isSilence && provider.isPlaying) continue;  
 
             bool isBlack = _isBlackKey(note.keyIndex);
             double width = isBlack ? blackKeyWidth : whiteKeyWidth;
             double left = _calculateLeftPos(note.keyIndex, whiteKeyWidth, blackKeyWidth);
             double height = note.height * pixelRatio;
 
-            double bottomPos;
+            double bottomPos = provider.isPlaying ? note.currentOffset : note.currentOffset * pixelRatio;
 
-            if (provider.isPlaying) {
-              // EN LECTURE : La position est directement stockée dans currentOffset par le Timer
-              bottomPos = note.currentOffset;
-            } else {
-              // EN EDITION : Calcul statique empilé
-              bottomPos = note.currentOffset * pixelRatio;
-            }
-
-            // Clipping : ne pas dessiner si hors écran (optimisation)
             if (bottomPos > constraints.maxHeight) continue;
 
-            tiles.add(Positioned(
+            bool hasOverride = note.overrideColor != null;
+            Color noteColor = note.overrideColor ?? style.getColorForNote(note.keyIndex);
+
+            final noteTile = Positioned(
               left: left,
               bottom: bottomPos,
               width: width,
               height: height,
               child: GestureDetector(
-                // Désactiver le clic pendant la lecture
                 onTap: provider.isPlaying ? null : () => _showEditDialog(context, provider, note),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: note.color,
-                    // Gradient vertical pour donner du relief et de la profondeur
-                    gradient: LinearGradient(
+                    color: noteColor,
+                    gradient: (config.useGradient && !hasOverride) ? null : LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        note.color.withValues(alpha: 0.9),
-                        note.color,
-                        note.color.withValues(alpha: 0.85),
+                        noteColor.withValues(alpha: 0.9),
+                        noteColor,
+                        noteColor.withValues(alpha: 0.85),
                       ],
                       stops: const [0.0, 0.4, 1.0],
                     ),
                     border: Border.all(color: Colors.white24, width: 0.5),
                     borderRadius: BorderRadius.circular(1.5),
                   ),
-                  // Séparateur horizontal à la base de chaque note
-                  // Crucial pour distinguer les notes répétées ou les accords denses
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Container(
-                      height: 1.5,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(1.5)),
-                      ),
-                    ),
+                ),
+              ),
+            );
+
+            // Separate notes for masking
+            if (config.useGradient && !hasOverride) {
+              maskedNotes.add(noteTile);
+            } else {
+              unmaskedNotes.add(noteTile);
+            }
+
+            // Always add a bottom bar on top of everything to ensure separation
+            bottomBars.add(Positioned(
+              left: left,
+              bottom: bottomPos,
+              width: width,
+              child: IgnorePointer(
+                child: Container(
+                  height: 2.0, // Slightly thicker for better visibility
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.8), // Darker for contrast
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(1.5)),
                   ),
                 ),
               ),
             ));
           }
+
+          Widget maskedLayer = Stack(children: maskedNotes);
+
+          if (config.useGradient && maskedNotes.isNotEmpty) {
+            double angleRad = (config.gradientAngle - 90) * 3.14159 / 180;
+            maskedLayer = ShaderMask(
+              shaderCallback: (bounds) {
+                return LinearGradient(
+                  begin: Alignment(math.cos(angleRad + 3.14159), math.sin(angleRad + 3.14159)),
+                  end: Alignment(math.cos(angleRad), math.sin(angleRad)),
+                  colors: config.gradientColors,
+                ).createShader(bounds);
+              },
+              blendMode: BlendMode.srcIn,
+              child: maskedLayer,
+            );
+          }
+
+          tiles.add(Positioned.fill(child: Stack(children: [
+            maskedLayer,
+            ...unmaskedNotes,
+            ...bottomBars,
+          ])));
 
           return Stack(children: tiles);
         },
@@ -155,13 +187,21 @@ class CascadeView extends StatelessWidget {
               _colorBtn(context, note, Colors.red, prov),
               _colorBtn(context, note, Colors.yellow, prov),
             ],
-          )
+          ),
+          if (note.overrideColor != null)
+            TextButton(
+              onPressed: () {
+                prov.updateNote(note, note.height, null);
+                Navigator.pop(context);
+              },
+              child: const Text("Réinitialiser la couleur"),
+            ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: () {
-            prov.deleteNote(note); // Helper to be added in Provider
+            prov.deleteNote(note); 
             Navigator.pop(context);
           },
           child: Text("Supprimer", style: TextStyle(color: Colors.red)),
@@ -169,7 +209,7 @@ class CascadeView extends StatelessWidget {
         TextButton(
           onPressed: () {
             double? newH = double.tryParse(heightCtrl.text);
-            if(newH != null) prov.updateNote(note, newH, note.color);
+            if(newH != null) prov.updateNote(note, newH, note.overrideColor);
             Navigator.pop(context);
           },
           child: Text("Valider"),

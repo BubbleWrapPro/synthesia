@@ -2,9 +2,12 @@
   <dictionary name="project">
     <words>
       <w>Décommenter</w>
+      <w>Sauvegarder</w>
+      <w>Supprimer</w>
       <w>abscisses</w>
       <w>afin</w>
       <w>aligné</w>
+      <w>colorpicker</w>
       <w>d'animation</w>
       <w>d'interactions</w>
       <w>déclenche</w>
@@ -18,6 +21,7 @@
       <w>nouvelles</w>
       <w>séparant</w>
       <w>winmm</w>
+      <w>wtitle</w>
     </words>
   </dictionary>
 </component>

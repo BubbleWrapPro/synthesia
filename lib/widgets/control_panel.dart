@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/session_provider.dart';
+import '../pages/customization_page.dart';
 
 class ControlPanel extends StatelessWidget {
   const ControlPanel({super.key});
@@ -40,7 +41,7 @@ class ControlPanel extends StatelessWidget {
             ]),
             const SizedBox(width: 10),
 
-            // Hauteur Defaut
+            // Hauteur Défaut
             SizedBox(
               width: 50,
               child: TextField(
@@ -95,6 +96,15 @@ class ControlPanel extends StatelessWidget {
               ],
             ),
           ]),
+
+          const VerticalDivider(width: 20),
+
+          // 5. Apparence
+          _actionGroup("Apparence", [
+            _btn("Style (T)", () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomizationPage()));
+            }, Colors.purple),
+          ]),
         ],
       ),
     );
@@ -106,7 +116,11 @@ class ControlPanel extends StatelessWidget {
 
   Widget _btn(String label, VoidCallback onTap, Color color) {
     return ElevatedButton(
-      style: ElevatedButton.styleFrom(backgroundColor: color, padding: const EdgeInsets.symmetric(horizontal: 10)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+      ),
       onPressed: onTap,
       child: Text(label, style: const TextStyle(fontSize: 12)),
     );

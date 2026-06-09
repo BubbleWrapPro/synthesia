@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'providers/session_provider.dart';
+import 'providers/style_provider.dart';
 import 'widgets/piano_keyboard.dart';
 import 'widgets/cascade_view.dart';
 import 'widgets/control_panel.dart';
+import 'pages/customization_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +20,7 @@ void main() {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => SessionProvider()),
+        ChangeNotifierProvider(create: (context) => StyleProvider()),
       ],
       child: const MyApp(),
     ),
@@ -100,6 +103,15 @@ class HomeScreen extends StatelessWidget {
         // Backspace : Supprimer Silence (Suppression rapide de 1 unité)
         const SingleActivator(LogicalKeyboardKey.backspace): () {
           provider.removeSilence(1);
+        },
+
+        // --- 4. APPARENCE ---
+        // T : Ouvrir le Style
+        const SingleActivator(LogicalKeyboardKey.keyT): () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CustomizationPage()),
+          );
         },
       },
       child: Focus(
