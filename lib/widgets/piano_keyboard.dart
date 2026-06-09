@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/session_provider.dart';
@@ -8,97 +9,157 @@ class PianoKeyboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final provider = Provider.of<SessionProvider>(context);
+    final style = Provider.of<StyleProvider>(context);
+    final config = style.currentConfig;
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Calculate key width based on screen width
         final double whiteKeyWidth = constraints.maxWidth / 52;
         final double blackKeyWidth = whiteKeyWidth * 0.6;
         final double blackKeyHeight = constraints.maxHeight * 0.6;
 
-        List<Widget> keys = [];
+        List<Widget> baseKeys = [];
+        List<Widget> activeOverlays = [];
 
-        // Music Theory: Pattern of keys in an octave (12 semitones)
-        // A0, A#0, B0 | C1, C#1 ... 
-        // We iterate 0 to 87.
         int whiteKeyCounter = 0;
-
         for (int i = 0; i < 88; i++) {
           bool isBlack = _isBlackKey(i);
+          double left;
+          double width;
+          double? height;
 
           if (!isBlack) {
-            // Add White Key
-            double leftPos = whiteKeyCounter * whiteKeyWidth;
-            keys.add(Positioned(
-              left: leftPos,
-              top: 0,
-              bottom: 0,
-              width: whiteKeyWidth,
-              child: _buildKey(context, i, false),
-            ));
+            left = whiteKeyCounter * whiteKeyWidth;
+            width = whiteKeyWidth;
             whiteKeyCounter++;
+          } else {
+            left = (whiteKeyCounter * whiteKeyWidth) - (blackKeyWidth / 2);
+            width = blackKeyWidth;
+            height = blackKeyHeight;
+          }
+
+          // 1. Base Key (The physical key)
+          baseKeys.add(Positioned(
+            left: left,
+            top: 0,
+            bottom: height == null ? 0 : null,
+            height: height,
+            width: width,
+            child: _buildBaseKey(context, i, isBlack, provider),
+          ));
+
+          // 2. Active Overlay (The "Pressed" visual)
+          Color? activeColor = _getActiveColor(i, provider, style);
+          if (activeColor != null) {
+            activeOverlays.add(Positioned(
+              left: left,
+              top: 0,
+              bottom: height == null ? 0 : null,
+              height: height,
+              width: width,
+              child: _buildActiveOverlay(activeColor, config),
+            ));
           }
         }
 
-        // Add Black Keys ON TOP (Second loop ensures z-index)
-        whiteKeyCounter = 0; // Reset to track position
-        for (int i = 0; i < 88; i++) {
-          bool isBlack = _isBlackKey(i);
-          if (!isBlack) {
-            whiteKeyCounter++;
-          } else {
-            // Black key is positioned on the border of previous white key
-            double leftPos = (whiteKeyCounter * whiteKeyWidth) - (blackKeyWidth / 2);
-            keys.add(Positioned(
-              left: leftPos,
-              top: 0,
-              height: blackKeyHeight,
-              width: blackKeyWidth,
-              child: _buildKey(context, i, true),
-            ));
-          }
+        Widget activeLayer = Stack(children: activeOverlays);
+
+        // Apply Global Gradient to active layer if enabled
+        if (config.useGradient && activeOverlays.isNotEmpty) {
+          double angleRad = (config.gradientAngle - 90) * 3.14159 / 180;
+          activeLayer = ShaderMask(
+            shaderCallback: (bounds) {
+              return LinearGradient(
+                begin: Alignment(math.cos(angleRad + 3.14159), math.sin(angleRad + 3.14159)),
+                end: Alignment(math.cos(angleRad), math.sin(angleRad)),
+                colors: config.gradientColors,
+              ).createShader(bounds);
+            },
+            blendMode: BlendMode.srcIn,
+            child: activeLayer,
+          );
         }
 
         return Container(
           color: Colors.grey[900],
-          child: Stack(children: keys),
+          child: Stack(
+            children: [
+              ...baseKeys,
+              activeLayer,
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _buildKey(BuildContext context, int index, bool isBlack) {
-    final provider = Provider.of<SessionProvider>(context);
-    final style = Provider.of<StyleProvider>(context);
-    final isActive = provider.activeKeys.contains(index);
+  Color? _getActiveColor(int index, SessionProvider provider, StyleProvider style) {
+    // Priority 1: MIDI / Manual active keys
+    if (provider.activeKeys.contains(index)) {
+      return style.getColorForNote(index);
+    }
 
+    // Priority 2: Playback active notes
+    if (provider.isPlaying) {
+      final double pixelRatio = 100.0; // Dummy but consistency doesn't strictly need it for color pick
+      for (var note in provider.activeFallingNotes) {
+        if (note.keyIndex == index) {
+          double noteTop = note.currentOffset + (note.height * pixelRatio);
+          // Check if hitting keyboard (0)
+          // Since we just need the color, the logic is simplified
+          if (note.currentOffset <= 0 && noteTop >= 0) {
+            return note.overrideColor ?? style.getColorForNote(index);
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  Widget _buildBaseKey(BuildContext context, int index, bool isBlack, SessionProvider provider) {
     return Material(
-      color: isActive 
-          ? style.getColorForNote(index)
-          : (isBlack ? Colors.black : Colors.white),
+      color: isBlack ? Colors.black : Colors.white,
       shape: RoundedRectangleBorder(
-          side: BorderSide(color: Colors.black, width: 0.5),
-          borderRadius: BorderRadius.only(
+          side: const BorderSide(color: Colors.black, width: 0.5),
+          borderRadius: const BorderRadius.only(
               bottomLeft: Radius.circular(4),
               bottomRight: Radius.circular(4)
           )
       ),
       child: InkWell(
-        onTap: () {
-          provider.addNote(index, isBlack);
-        },
+        onTap: () => provider.addNote(index, isBlack),
       ),
     );
   }
 
-  // Helper to determine if the Nth key is black (Standard 88 key piano starts at A0)
-  bool _isBlackKey(int index) {
-    // Indexes of black keys in the first octave (A0, A#0, B0...)
-    // A0=0 (White), A#0=1 (Black), B0=2 (White)
-    // Then C1=3...
-    // Pattern relative to C is: C, C#, D, D#, E, F, F#, G, G#, A, A#, B
-    //                           W, B,  W, B,  W, W, B,  W, B,  W, B,  W
+  Widget _buildActiveOverlay(Color color, dynamic config) {
+    return Container(
+      decoration: BoxDecoration(
+        color: color,
+        // Replicate tile decoration logic from CascadeView
+        gradient: config.useGradient ? null : LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            color.withValues(alpha: 0.9),
+            color,
+            color.withValues(alpha: 0.85),
+          ],
+          stops: const [0.0, 0.4, 1.0],
+        ),
+        border: Border.all(color: Colors.white24, width: 0.5),
+        borderRadius: const BorderRadius.only(
+            bottomLeft: Radius.circular(4),
+            bottomRight: Radius.circular(4)
+        ),
+      ),
+      // Optional: Add the "bottom bar" like in CascadeView?
+      // For the keyboard, maybe it's cleaner without it, or at the top.
+    );
+  }
 
-    // Offset index by 9 (because A0 is 9 semitones below C1) to align with C-major pattern
+  bool _isBlackKey(int index) {
     int n = (index + 9) % 12;
     return [1, 3, 6, 8, 10].contains(n);
   }

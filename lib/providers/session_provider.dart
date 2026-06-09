@@ -348,6 +348,7 @@ class SessionProvider with ChangeNotifier {
         keyIndex: note.keyIndex,
         height: note.height,
         color: note.color,
+        overrideColor: note.overrideColor,
         chordId: note.chordId,
         isSilence: note.isSilence,
         currentOffset: cascadeHeight,
