@@ -1,163 +1,90 @@
 # Synthesia
 
-# Table des matières
-- [Description](#description)
-  - [Objectif](#objectif)
-  - [Définitions](#définitions)
-- [Composition de l'interface](#composition-de-linterface)
-- [Fonctionnalités](#fonctionnalités)
-    - [Interactions du clavier](#interactions-du-clavier)
-    - [Fonctionnement de la partie cascade](#fonctionnement-de-la-partie-cascade)
-    - [Fonctions des boutons](#fonctions-des-boutons)
-        - [Effacer](#effacer)
-        - [sauvegarder](#sauvegarder)
-        - [sauvegarder dans un fichier](#sauvegarder-dans-un-fichier)
-        - [Mode "Accord"](#mode-accord)
-        - [Silence](#silence)
-        - [supprimer un silence](#supprimer-un-silence)
-        - [Hauteur par défaut](#hauteur-par-défaut)
-        - [Importer](#importer)
-        - [Bpm](#bpm)
-        - [Jouer la musique](#jouer-la-musique)
+A custom Flutter-based piano learning and recording interface with MIDI support.
 
+## 🎹 Overview
+Synthesia is an interactive 88-key piano application designed for creating, recording, and replaying "waterfall" style note cascades. It bridges the gap between manual note-by-note creation and real-time MIDI recording, offering a highly customizable visual experience for musicians and developers alike.
 
+## ✨ Key Features
+- **88-Key Piano Interface**: Responsive keyboard with dynamic color feedback and MIDI input mapping.
+- **Dual Creation Modes**:
+    - **MIDI Recording**: Connect a digital piano to record notes in real-time with automatic chord detection and smart silence handling (Windows only)
+    - **Manual Editing**: Add, modify, or delete notes and silences manually via the UI.
+- **Dynamic Waterfall Visualization**: A smooth "cascade" view that renders notes with depth, borders, and synchronized animations.
+- **Advanced Styling System**:
+    - **Differentiation Modes**: Color notes by key type (Black/White), split-point (Left/Right hand), or use solid colors.
+    - **Global Textures**: Apply interactive, rotatable gradients across the entire waterfall view using `ShaderMask`.
+    - **Per-Note Overrides**: Manually color individual notes to highlight specific passages or melodies.
+- **Session Management**: Full support for importing and exporting sessions as JSON files.
+- **Playback Engine**: Replay your recordings with synchronized visual key-press feedback on the virtual piano.
 
-# Description
+## 🛠 Tech Stack
+- **Framework**: [Flutter](https://flutter.dev) (Cross-platform)
+- **State Management**: [Provider](https://pub.dev/packages/provider)
+- **Persistence**: `shared_preferences` for application settings and style configs.
+- **File I/O**: `file_selector` and `path_provider` for robust document management.
+- **MIDI Integration**: Native `MethodChannel` for high-performance device communication.
 
-## Objectif
-Interface de clavier de piano à 88 touches permettant de créer ses propres cascades de tuile note à note afin de les rejouer pour s'entrainer.
+## 🚀 Getting Started
 
-## Définitions
-_Tuile_ : désigne un rectangle créé après un clic sur une touche.\
-_Session_ : liste des notes créées pendant une session ou depuis la dernière suppression totale.\
-_Hauteur_ : longueur (y) du rectangle créé après un clic sur une touche
+### Prerequisites
+- Flutter SDK (latest stable version)
+- A MIDI-compatible device (Optional, for recording features)
 
+### Installation
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/Thomas/synthesia.git
+   cd synthesia
+   ```
+2. **Install dependencies**:
+   ```bash
+   flutter pub get
+   ```
+3. **Run the application**:
+   ```bash
+   flutter run
+   ```
 
-# Composition de l'interface
-- **Format** : paysage 16/9
-- **3/9 du bas de l'écran** : 88 touches d'un piano (blanches et noires avec noires plus fines et décalées en hauteur) (partie "clavier")
-- **5/9 dessus** : fond noir avec barre fine grise séparant les octaves sur toute la hauteur (partie "cascade")
-- **1/9 du haut** : boutons d'interactions avec les notes (partie "interactions")
+## ⌨️ Keyboard Shortcuts
+Maximize your productivity with these built-in shortcuts:
 
-# Fonctionnalités
+| Shortcut | Action |
+|----------|--------|
+| `P` | Toggle Play/Stop music |
+| `Ctrl + S` | Save current session to file |
+| `Ctrl + O` | Import session file |
+| `Ctrl + Del`| Clear entire session |
+| `A` | Toggle Chord Mode (Manual edit) |
+| `Space` | Add 1 unit of silence |
+| `Backspace`| Remove last unit of silence |
+| `T` | Open Style Customization Menu |
 
+## 🎨 Architecture
+The project follows a modular, reactive architecture using the Provider pattern:
 
-## Interactions du clavier
-- Chaque touche peut être clique.
-- Un clic créé un rectangle aligné sur l'axe des abscisses avec la note correspondante
+- **Models**: 
+    - `NoteModel`: Core data structure for notes, including timing, pitch, and styling.
+    - `StyleConfig`: Defines global coloring rules, gradients, and differentiation modes.
+- **Providers**: 
+    - `SessionProvider`: Orchestrates MIDI listeners, recording logic, sequencer playback, and file operations.
+    - `StyleProvider`: Manages visual themes and handles the logic for dynamic color assignment.
+- **Widgets**:
+    - `CascadeView`: Custom painter/stack logic for rendering the waterfall visualization.
+    - `PianoKeyboard`: A layered keyboard widget that separates base keys from active visual overlays.
+    - `ControlPanel`: The primary interface for real-time settings (BPM, Height, MIDI options).
 
+## 🤝 Contributing
+Contributions make the open-source community an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
 
-## Fonctionnement de la partie cascade
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
+## 📜 License
+Distributed under the **CC0 1.0 Universal (Public Domain)**. See `LICENSE` for the full legal text.
 
-**Une tuile :**
-+ La tuile créée a la même largeur que la touche correspondante
-  + Sa longueur est défini par [un input sur la partie interaction](#hauteur-par-défaut)
-+ La tuile est cliquable…
-  + Un clic ouvre une interface permettant de modifier la durée (aussi appelée "hauteur"), la couleur, ou de la supprimer.
-+ Les couleurs par défaut des tuiles sont :
-  + Vert clair pour une touche blanche
-  + Bleu pour une touche noire
-
-**La cascade :**
-+ La tuile est créée collée au clavier
-  + Les tuiles déjà existantes remontent de la hauteur de la note créée
-  + Si une tuile atteint le haut de la partie "cascade", elle disparait
-+ En [mode accord](#mode-accord), les tuiles apparaissent au même niveau et aucune ne remontent
-
-
-
-## Fonctions des boutons
-
-### Effacer
-
-**Bouton one-click : déclenche une action.**\
-Supprime toutes les notes de la _session_. Démarre une nouvelle _session_.
-
-
-
-### sauvegarder
-
-**Bouton one-click : déclenche une action.**\
-Enregistre en mémoire dans l'application les notes de la session en cours.\
-Données sauvegardées : ordre, note, _hauteur_, couleur, mode accord
-
-
-
-### Sauvegarder dans un fichier
-
-**Bouton one-click : déclenche une action.**\
-Enregistre un fichier à l'emplacement voulu par l'utilisateur et contenant les notes de la session en cours.\
-Données sauvegardées : ordre, note, _hauteur_, couleur, mode accord
-
-
-
-### Mode "Accord"
-
-**Bouton toggle : Actif (vert) — Inactif (Gris)**\
-Quand actif : les notes créées apparaissent à la même hauteur et aucune ne remonte.\
-Cette donnée est enregistrée dans la note sous forme d'identifiant de l'accord.\
-Cela signifie qu'une note peut être retirée d'un accord, mais pas séparée.
-
-
-
-### Silence
-
-**Bouton one-click : déclenche une action**\
-Affiche une interface demandant la longueur du silence (x = entier entre 1 et 10)\
-Créé _x_ tuile invisible de hauteur 1.
-
-
-
-### Supprimer un silence
-
-**Bouton one-click : déclenche une action**\
-Affiche un message d'erreur à l'utilisateur si la dernière tuile n'est pas un silence.\
-Affiche une interface demandant la longueur du silence à retirer (x = entier entre 1 et longueur du dernier silence)\
-Supprime les _x_ derniers silences.
-
-
-### Hauteur par défaut
-
-**Entrée utilisateur : nombre décimal acceptant jusqu'à UN chiffre après la virgule.**\
-Défini le ratio de la hauteur d'une note.\
-Exemple : \
-- Hauteur de l'utilisateur : 1 → Longueur en pixel : 1/8 de la hauteur de l'écran\
-- Hauteur de l'utilisateur : 3 → Longueur en pixel : 3/8 de la hauteur de l'écran\
-Cas particulier :\
-Longueur en pixel > hauteur de la partie cascade : La note est affiché, mais passe derrière la partie interaction.
-
-
-
-### Importer
-
-**Bouton one-click : déclenche une action.**\
-Permet d'importer un fichier contenant des notes. \
-Sera jouer à la place de l'enregistrement mémoire s'il existe un fichier importé ET un enregistrement mémoire.
-
-
-
-### Bpm
-
-**Entrée utilisateur : nombre entier entre 30 et 240**\
-Ratio de la vitesse à laquelle les tuiles descendront en [mode jouer](#jouer-la-musique)
-
-
-
-### Jouer la musique
-
-**Bouton one-click : déclenche une action.**\
-
-Charge les notes du fichier importé.\
-Si pas de fichier importé, charge les notes en mémoire.\
-Si pas de notes en mémoire, affiche un message à l'utilisateur et reprends la session en cours.\
-
-En cas de notes à importer :\
-Fait disparaitre toutes les tuiles encore visibles.\
-Lis les tuiles existantes dans l'ordre et effectue les actions suivantes :\
-- Fait glisser chaque tuile (ou tuiles d'un même accord) du haut de la partie cascade jusqu'à disparaitre entièrement derrière le clavier\
-- Lorsqu'une tuile touche le clavier, la note du clavier correspondante change de couleur (sauf si c'est un silence)\
-- Elle redevient blanche ou noire lorsque la tuile n'apparait plus.\
-- Une tuile (sauf la première) n'apparait que lorsque la dernière tuile ou le dernier accord a fini d'apparaitre complètement.\
-Affiche un message "Musique terminée" lorsque toutes les tuiles ont disparu.
-
+---
+*Developed with ❤️ for musicians.*
