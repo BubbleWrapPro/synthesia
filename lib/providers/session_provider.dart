@@ -6,14 +6,48 @@ import 'package:file_selector/file_selector.dart';
 import '../models/note_model.dart';
 import 'package:flutter/services.dart';
 import 'package:dart_midi_pro/dart_midi_pro.dart';
+import 'package:flutter_midi/flutter_midi.dart';
 
 class SessionProvider with ChangeNotifier {
 
   // --- CONFIGURATION MIDI ---
   static const MethodChannel _midiChannel = MethodChannel('com.synthesia.midi');
+  final FlutterMidi _flutterMidi = FlutterMidi();
 
   SessionProvider() {
     _initMidiListener();
+    _loadSoundFont();
+  }
+
+  Future<void> _loadSoundFont() async {
+    if (Platform.isWindows) {
+      debugPrint("Windows: Using system MIDI synth (SF2 ignored for now)");
+      return;
+    }
+    try {
+      ByteData byteData = await rootBundle.load("assets/sounds/Piano_1.sf2");
+      _flutterMidi.prepare(sf2: byteData, name: "Piano_1.sf2");
+      debugPrint("SoundFont loaded: Piano_1.sf2");
+    } catch (e) {
+      debugPrint("Error loading SoundFont: $e");
+    }
+  }
+
+  // --- SOUND HELPERS ---
+  void _playNote(int midiNote) {
+    if (Platform.isWindows) {
+      _midiChannel.invokeMethod('playMidiNote', midiNote);
+    } else {
+      _flutterMidi.playMidiNote(midi: midiNote);
+    }
+  }
+
+  void _stopNote(int midiNote) {
+    if (Platform.isWindows) {
+      _midiChannel.invokeMethod('stopMidiNote', midiNote);
+    } else {
+      _flutterMidi.stopMidiNote(midi: midiNote);
+    }
   }
 
   void _initMidiListener() {
@@ -91,6 +125,9 @@ class SessionProvider with ChangeNotifier {
   }
 
   void _handleMidiNoteOn(int midiNote) {
+    // Jouer le son
+    _playNote(midiNote);
+
     // Si ce n'est pas déjà fait, on lance la boucle d'animation d'enregistrement
     if (!_isRecording) startRecordingLoop();
 
@@ -135,6 +172,7 @@ class SessionProvider with ChangeNotifier {
   }
 
   void _handleMidiNoteOff(int midiNote) {
+    _stopNote(midiNote);
     int keyIndex = midiNote - 21;
     // On retire la note des actives : elle arrêtera de grandir et commencera à monter
     _activeRecordingNotes.remove(keyIndex);
@@ -322,12 +360,26 @@ class SessionProvider with ChangeNotifier {
         return;
       }
 
+      double movement = pixelsPerMs * 16.0;
+
       for (var note in _activeFallingNotes) {
-        note.currentOffset -= (pixelsPerMs * 16.0); // Elle descend
+        double oldOffset = note.currentOffset;
+        note.currentOffset -= movement; // Elle descend
+
+        // [NOUVEAU] Déclenchement du son quand la note touche le clavier (offset 0)
+        if (oldOffset >= 0 && note.currentOffset < 0 && !note.isSilence) {
+          _playNote(note.keyIndex + 21);
+        }
       }
 
       // Nettoyage : Supprimer les notes passées sous le clavier
-      _activeFallingNotes.removeWhere((n) => n.currentOffset + (n.height * pixelRatio) < 0);
+      _activeFallingNotes.removeWhere((n) {
+        bool passedBottom = n.currentOffset + (n.height * pixelRatio) < 0;
+        if (passedBottom && !n.isSilence) {
+          _stopNote(n.keyIndex + 21);
+        }
+        return passedBottom;
+      });
 
       // Si l'injection est finie et que tout est tombé, on arrête proprement
       if (_injectionDone && _activeFallingNotes.isEmpty) {
@@ -397,6 +449,12 @@ class SessionProvider with ChangeNotifier {
 
   void stopMusic() {
     _isPlaying = false;
+    // [NOUVEAU] Arrêter tous les sons en cours
+    for (var note in _activeFallingNotes) {
+      if (!note.isSilence) {
+        _stopNote(note.keyIndex + 21);
+      }
+    }
     _activeFallingNotes.clear();
     _animTimer?.cancel();
     notifyListeners();

@@ -32,6 +32,11 @@ void FlutterWindow::StartMidiInput() {
     }
 }
 
+void FlutterWindow::StartMidiOutput() {
+    // Open the default MIDI mapper for output
+    midiOutOpen(&hMidiOut, MIDI_MAPPER, 0, 0, 0);
+}
+
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
@@ -73,6 +78,26 @@ bool FlutterWindow::OnCreate() {
           } else {
             result->Error("Bad Arguments", "Expected a string");
           }
+        } else if (call.method_name().compare("playMidiNote") == 0) {
+          const auto* arguments = std::get_if<int>(call.arguments());
+          if (arguments && hMidiOut) {
+            int note = *arguments;
+            DWORD msg = 0x90 | (note << 8) | (100 << 16);
+            midiOutShortMsg(hMidiOut, msg);
+            result->Success();
+          } else {
+            result->Error("MIDI Error", "Could not play note");
+          }
+        } else if (call.method_name().compare("stopMidiNote") == 0) {
+          const auto* arguments = std::get_if<int>(call.arguments());
+          if (arguments && hMidiOut) {
+            int note = *arguments;
+            DWORD msg = 0x80 | (note << 8) | (0 << 16);
+            midiOutShortMsg(hMidiOut, msg);
+            result->Success();
+          } else {
+            result->Error("MIDI Error", "Could not stop note");
+          }
         } else {
           result->NotImplemented();
         }
@@ -80,6 +105,7 @@ bool FlutterWindow::OnCreate() {
 
   // Start listening to the Piano
   StartMidiInput();
+  StartMidiOutput();
 
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
@@ -97,6 +123,15 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  if (hMidiIn) {
+    midiInStop(hMidiIn);
+    midiInClose(hMidiIn);
+    hMidiIn = NULL;
+  }
+  if (hMidiOut) {
+    midiOutClose(hMidiOut);
+    hMidiOut = NULL;
+  }
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

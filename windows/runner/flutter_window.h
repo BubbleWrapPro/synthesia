@@ -32,9 +32,11 @@ class FlutterWindow : public Win32Window {
  private:
     // For MIDI I/O
   HMIDIIN hMidiIn = NULL;
+  HMIDIOUT hMidiOut = NULL;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
 
   void StartMidiInput();
+  void StartMidiOutput();
   static void CALLBACK MidiInProc(HMIDIIN hMidiIn, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2);
 
   // The project to run.
