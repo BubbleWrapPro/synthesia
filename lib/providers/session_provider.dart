@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 import '../models/note_model.dart';
 import 'package:flutter/services.dart';
+import 'package:dart_midi_pro/dart_midi_pro.dart';
 
 class SessionProvider with ChangeNotifier {
 
@@ -414,33 +415,36 @@ class SessionProvider with ChangeNotifier {
   }
 
   Future<void> importFile() async {
-    const XTypeGroup typeGroup = XTypeGroup(label: 'JSON files', extensions: <String>['json']);
-    final XFile? file = await openFile(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
+    const XTypeGroup jsonGroup = XTypeGroup(label: 'JSON files', extensions: <String>['json']);
+    const XTypeGroup midiGroup = XTypeGroup(label: 'MIDI files', extensions: <String>['mid', 'midi']);
+
+    final XFile? file = await openFile(acceptedTypeGroups: <XTypeGroup>[jsonGroup, midiGroup]);
 
     if (file != null) {
-      String content = await file.readAsString();
-      try {
-        List<dynamic> jsonList = jsonDecode(content);
-        List<NoteModel> rawNotes = jsonList.map((e) => NoteModel.fromJson(e)).toList();
+      String extension = file.name.split('.').last.toLowerCase();
 
-        // 1. Détection du type de morceau
-        bool isMidiSong = rawNotes.any((n) => n.fromMidi);
+      if (extension == 'json') {
+        String content = await file.readAsString();
+        try {
+          List<dynamic> jsonList = jsonDecode(content);
+          List<NoteModel> rawNotes = jsonList.map((e) => NoteModel.fromJson(e)).toList();
 
-        if (isMidiSong) {
-          // 2a. Reconstitution précise pour le MIDI (via Timestamps)
-          _reconstructMidiOffsets(rawNotes);
-        } else {
-          // 2b. Reconstitution par empilement pour le mode manuel
-          _reconstructManualOffsets(rawNotes);
+          bool isMidiSong = rawNotes.any((n) => n.fromMidi);
+          if (isMidiSong) {
+            _reconstructMidiOffsets(rawNotes);
+          } else {
+            _reconstructManualOffsets(rawNotes);
+          }
+
+          _session = rawNotes;
+          _currentFileName = file.name;
+          _updateSystemTitle();
+          notifyListeners();
+        } catch (e) {
+          debugPrint("Erreur import JSON: $e");
         }
-
-        _session = rawNotes;
-        _currentFileName = file.name; // Stocker le nom du fichier
-        _updateSystemTitle(); // [NEW] Force OS title update
-        notifyListeners();
-
-      } catch (e) {
-        debugPrint("Erreur import: $e");
+      } else if (extension == 'mid' || extension == 'midi') {
+        await _importMidiFile(file);
       }
     }
   }
@@ -572,6 +576,99 @@ class SessionProvider with ChangeNotifier {
     if (_isPlaying) return;
 
     notifyListeners();
+  }
+
+
+
+  Future<void> _importMidiFile(XFile file) async {
+    try {
+      final bytes = await file.readAsBytes();
+      final parser = MidiParser();
+      final parsedMidi = parser.parseMidiFromBuffer(bytes.toList());
+
+      List<NoteModel> rawNotes = [];
+
+      int ppq = parsedMidi.header.ticksPerBeat ?? 120;
+      int currentBpm = 120;
+
+      Map<int, int> activeNotes = {};
+
+      for (var track in parsedMidi.tracks) {
+        int absoluteTime = 0;
+
+        for (var event in track) {
+          absoluteTime += event.deltaTime;
+
+          if (event is SetTempoEvent) {
+            currentBpm = (60000000 / event.microsecondsPerBeat).round();
+            _bpm = currentBpm;
+            continue;
+          }
+
+          // Extraction sécurisée des données selon le type d'événement
+          int? currentNote;
+          bool isNoteOn = false;
+          bool isNoteOff = false;
+
+          if (event is NoteOnEvent) {
+            currentNote = event.noteNumber;
+            isNoteOn = event.velocity > 0;
+            isNoteOff = event.velocity == 0; // Une vélocité de 0 équivaut à un NoteOff
+          } else if (event is NoteOffEvent) {
+            currentNote = event.noteNumber;
+            isNoteOff = true;
+          }
+
+          if (currentNote != null) {
+            if (isNoteOn) {
+              // Enregistrement du début de la note
+              activeNotes[currentNote] = absoluteTime;
+            } else if (isNoteOff) {
+              // Fin de la note, calcul de la durée
+              if (activeNotes.containsKey(currentNote)) {
+                int startTime = activeNotes[currentNote]!;
+                int durationTicks = absoluteTime - startTime;
+
+                double height = durationTicks / ppq;
+                if (height <= 0) height = 0.1;
+
+                int keyIndex = currentNote - 21;
+
+                if (keyIndex >= 0 && keyIndex <= 87) {
+                  bool isBlack = [1, 3, 6, 8, 10].contains(currentNote % 12);
+
+                  double msPerTick = (60000.0 / currentBpm) / ppq;
+                  int startMs = (startTime * msPerTick).round();
+
+                  DateTime fakeStartTime = DateTime.fromMillisecondsSinceEpoch(startMs);
+                  String chordId = fakeStartTime.toIso8601String();
+
+                  rawNotes.add(NoteModel(
+                    keyIndex: keyIndex,
+                    height: height,
+                    color: isBlack ? Colors.blue : Colors.lightGreen,
+                    chordId: chordId,
+                    fromMidi: true,
+                    currentOffset: 0.0,
+                  ));
+                }
+                activeNotes.remove(currentNote);
+              }
+            }
+          }
+        }
+      }
+
+      if (rawNotes.isNotEmpty) {
+        _reconstructMidiOffsets(rawNotes);
+        _session = rawNotes;
+        _currentFileName = file.name;
+        _updateSystemTitle();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Erreur import fichier MIDI: $e");
+    }
   }
 
 

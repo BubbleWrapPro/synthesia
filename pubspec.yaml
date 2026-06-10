@@ -36,6 +36,7 @@ dependencies:
   intl: ^0.18.0             # Date formatting (optional)
   flutter_midi_command: ^0.4.14 # MIDI connectivity (USB/Bluetooth)
   flutter_midi: ^1.0.0+rc.11   # SoundFont playback
+  dart_midi_pro: ^1.0.2     # MIDI Parser
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
