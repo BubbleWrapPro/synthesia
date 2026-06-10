@@ -79,10 +79,11 @@ bool FlutterWindow::OnCreate() {
             result->Error("Bad Arguments", "Expected a string");
           }
         } else if (call.method_name().compare("playMidiNote") == 0) {
-          const auto* arguments = std::get_if<int>(call.arguments());
+          const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
           if (arguments && hMidiOut) {
-            int note = *arguments;
-            DWORD msg = 0x90 | (note << 8) | (100 << 16);
+            int note = std::get<int>(arguments->at(flutter::EncodableValue("note")));
+            int velocity = std::get<int>(arguments->at(flutter::EncodableValue("velocity")));
+            DWORD msg = 0x90 | (note << 8) | (velocity << 16);
             midiOutShortMsg(hMidiOut, msg);
             result->Success();
           } else {
@@ -151,10 +152,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
 
     // Freepiano Logic: Check for Note ON (0x90) and Velocity > 0
     if ((status & 0xF0) == 0x90 && velocity > 0) {
-        channel_->InvokeMethod("onNoteOn", std::make_unique<flutter::EncodableValue>(note));
+        flutter::EncodableMap args;
+        args[flutter::EncodableValue("note")] = flutter::EncodableValue(note);
+        args[flutter::EncodableValue("velocity")] = flutter::EncodableValue(velocity);
+        channel_->InvokeMethod("onNoteOn", std::make_unique<flutter::EncodableValue>(args));
     }
     // Détection Note OFF (Relâchement)
-    // En MIDI, NoteOff peut être 0x80 OU NoteOn(0x90) avec vélocité 0
     else if ((status & 0xF0) == 0x80 || ((status & 0xF0) == 0x90 && velocity == 0)) {
         channel_->InvokeMethod("onNoteOff", std::make_unique<flutter::EncodableValue>(note));
     }

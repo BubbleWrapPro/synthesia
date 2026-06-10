@@ -9,6 +9,7 @@ class NoteModel {
   final String chordId;     // To group notes in "Mode Accord"
   final bool isSilence;     // Special flag for Silence
   final bool fromMidi;      // [NEW] True if recorded from real device
+  final int velocity;       // [NEW] MIDI Velocity (0-127), default 100
 
   // Mutable for playback animation (current Y position)
   double currentOffset;
@@ -21,7 +22,8 @@ class NoteModel {
     this.overrideColor,
     required this.chordId,
     this.isSilence = false,
-    this.fromMidi = false, // Default false
+    this.fromMidi = false,
+    this.velocity = 100, // Default to standard volume
     this.currentOffset = 0.0,
   }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString() + keyIndex.toString();
 
@@ -35,6 +37,7 @@ class NoteModel {
     'chordId': chordId,
     'isSilence': isSilence,
     'fromMidi': fromMidi,
+    'velocity': velocity,
   };
 
   // Create from JSON
@@ -48,6 +51,7 @@ class NoteModel {
       chordId: json['chordId'],
       isSilence: json['isSilence'] ?? false,
       fromMidi: json['fromMidi'] ?? false,
+      velocity: json['velocity'] ?? 100,
     );
   }
 

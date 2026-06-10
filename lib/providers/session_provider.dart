@@ -34,9 +34,13 @@ class SessionProvider with ChangeNotifier {
   }
 
   // --- SOUND HELPERS ---
-  void _playNote(int midiNote) {
+  void _playNote(int midiNote, {int velocity = 100}) {
     if (Platform.isWindows) {
-      _midiChannel.invokeMethod('playMidiNote', midiNote);
+      _midiChannel.invokeMethod('playMidiNote', {
+        'note': midiNote,
+        'velocity': velocity,
+      });
+      debugPrint("Velocity of $midiNote : $velocity");
     } else {
       _flutterMidi.playMidiNote(midi: midiNote);
     }
@@ -53,9 +57,19 @@ class SessionProvider with ChangeNotifier {
   void _initMidiListener() {
     _midiChannel.setMethodCallHandler((call) async {
       if (call.method == "onNoteOn") {
-        int note = call.arguments as int;
+        int note;
+        int velocity = 100;
+
+        if (call.arguments is int) {
+          note = call.arguments as int;
+        } else {
+          final Map<dynamic, dynamic> args = call.arguments as Map<dynamic, dynamic>;
+          note = args['note'] as int;
+          velocity = args['velocity'] as int;
+        }
+
         _activeKeys.add(note - 21); // Logic for PianoKeyboard feedback
-        _handleMidiNoteOn(note);
+        _handleMidiNoteOn(note, velocity: velocity);
       } else if (call.method == "onNoteOff") {
         int note = call.arguments as int;
         _activeKeys.remove(note - 21); // Logic for PianoKeyboard feedback
@@ -124,9 +138,9 @@ class SessionProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void _handleMidiNoteOn(int midiNote) {
+  void _handleMidiNoteOn(int midiNote, {int velocity = 100}) {
     // Jouer le son
-    _playNote(midiNote);
+    _playNote(midiNote, velocity: velocity);
 
     // Si ce n'est pas déjà fait, on lance la boucle d'animation d'enregistrement
     if (!_isRecording) startRecordingLoop();
@@ -161,6 +175,7 @@ class SessionProvider with ChangeNotifier {
       chordId: _currentMidiChordId, // Utilise l'ID intelligent (Fix 1)
       currentOffset: 0.0, // Elle apparaît tout en bas (le présent)
       fromMidi: true, // [NEW] Marqueur
+      velocity: velocity,
     );
 
     _session.add(newNote);
@@ -223,6 +238,7 @@ class SessionProvider with ChangeNotifier {
             isSilence: note.isSilence,
             currentOffset: 0.0, // Reste ancrée en bas
             fromMidi: note.fromMidi,
+            velocity: note.velocity,
           );
 
           _session[i] = grownNote;
@@ -368,7 +384,7 @@ class SessionProvider with ChangeNotifier {
 
         // [NOUVEAU] Déclenchement du son quand la note touche le clavier (offset 0)
         if (oldOffset >= 0 && note.currentOffset < 0 && !note.isSilence) {
-          _playNote(note.keyIndex + 21);
+          _playNote(note.keyIndex + 21, velocity: note.velocity);
         }
       }
 
@@ -408,6 +424,7 @@ class SessionProvider with ChangeNotifier {
         isSilence: note.isSilence,
         currentOffset: cascadeHeight,
         fromMidi: note.fromMidi,
+        velocity: note.velocity,
       );
 
       if (!fallingNote.isSilence) {
@@ -587,7 +604,8 @@ class SessionProvider with ChangeNotifier {
         chordId: note.chordId, 
         isSilence: note.isSilence,
         currentOffset: note.currentOffset,
-        fromMidi: note.fromMidi
+        fromMidi: note.fromMidi,
+        velocity: note.velocity
     );
     notifyListeners();
   }
@@ -645,33 +663,40 @@ class SessionProvider with ChangeNotifier {
       final parsedMidi = parser.parseMidiFromBuffer(bytes.toList());
 
       List<NoteModel> rawNotes = [];
-
       int ppq = parsedMidi.header.ticksPerBeat ?? 120;
       int currentBpm = 120;
+      int totalEvents = 0;
+      int skippedNotes = 0;
 
-      Map<int, int> activeNotes = {};
+      debugPrint("MIDI Header: PPQ=$ppq, Tracks=${parsedMidi.tracks.length}");
 
-      for (var track in parsedMidi.tracks) {
+      for (int t = 0; t < parsedMidi.tracks.length; t++) {
+        var track = parsedMidi.tracks[t];
         int absoluteTime = 0;
+        Map<int, int> activeNotes = {};
+        Map<int, int> activeVelocities = {};
 
         for (var event in track) {
           absoluteTime += event.deltaTime;
+          totalEvents++;
 
           if (event is SetTempoEvent) {
             currentBpm = (60000000 / event.microsecondsPerBeat).round();
             _bpm = currentBpm;
+            debugPrint("Tempo change: $currentBpm BPM");
             continue;
           }
 
-          // Extraction sécurisée des données selon le type d'événement
           int? currentNote;
+          int velocity = 100;
           bool isNoteOn = false;
           bool isNoteOff = false;
 
           if (event is NoteOnEvent) {
             currentNote = event.noteNumber;
+            velocity = event.velocity;
             isNoteOn = event.velocity > 0;
-            isNoteOff = event.velocity == 0; // Une vélocité de 0 équivaut à un NoteOff
+            isNoteOff = event.velocity == 0;
           } else if (event is NoteOffEvent) {
             currentNote = event.noteNumber;
             isNoteOff = true;
@@ -679,25 +704,25 @@ class SessionProvider with ChangeNotifier {
 
           if (currentNote != null) {
             if (isNoteOn) {
-              // Enregistrement du début de la note
               activeNotes[currentNote] = absoluteTime;
+              activeVelocities[currentNote] = velocity;
             } else if (isNoteOff) {
-              // Fin de la note, calcul de la durée
               if (activeNotes.containsKey(currentNote)) {
                 int startTime = activeNotes[currentNote]!;
                 int durationTicks = absoluteTime - startTime;
+                int recordedVelocity = activeVelocities[currentNote] ?? 100;
 
                 double height = durationTicks / ppq;
-                if (height <= 0) height = 0.1;
+                if (height <= 0) height = 0.05;
 
                 int keyIndex = currentNote - 21;
 
                 if (keyIndex >= 0 && keyIndex <= 87) {
                   bool isBlack = [1, 3, 6, 8, 10].contains(currentNote % 12);
-
                   double msPerTick = (60000.0 / currentBpm) / ppq;
                   int startMs = (startTime * msPerTick).round();
 
+                  // Important: we use a deterministic date for reconstruction
                   DateTime fakeStartTime = DateTime.fromMillisecondsSinceEpoch(startMs);
                   String chordId = fakeStartTime.toIso8601String();
 
@@ -707,15 +732,21 @@ class SessionProvider with ChangeNotifier {
                     color: isBlack ? Colors.blue : Colors.lightGreen,
                     chordId: chordId,
                     fromMidi: true,
+                    velocity: recordedVelocity,
                     currentOffset: 0.0,
                   ));
+                } else {
+                  skippedNotes++;
                 }
                 activeNotes.remove(currentNote);
+                activeVelocities.remove(currentNote);
               }
             }
           }
         }
       }
+
+      debugPrint("MIDI Import Done: ${rawNotes.length} notes, $skippedNotes skipped, $totalEvents events processed.");
 
       if (rawNotes.isNotEmpty) {
         _reconstructMidiOffsets(rawNotes);
@@ -723,6 +754,8 @@ class SessionProvider with ChangeNotifier {
         _currentFileName = file.name;
         _updateSystemTitle();
         notifyListeners();
+      } else {
+        debugPrint("No valid notes found in MIDI file.");
       }
     } catch (e) {
       debugPrint("Erreur import fichier MIDI: $e");
