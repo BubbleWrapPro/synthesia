@@ -161,6 +161,13 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     else if ((status & 0xF0) == 0x80 || ((status & 0xF0) == 0x90 && velocity == 0)) {
         channel_->InvokeMethod("onNoteOff", std::make_unique<flutter::EncodableValue>(note));
     }
+    // Control Change (Ex: Sustain Pedal CC 64)
+    else if ((status & 0xF0) == 0xB0) {
+        flutter::EncodableMap args;
+        args[flutter::EncodableValue("controller")] = flutter::EncodableValue(note);
+        args[flutter::EncodableValue("value")] = flutter::EncodableValue(velocity);
+        channel_->InvokeMethod("onControlChange", std::make_unique<flutter::EncodableValue>(args));
+    }
 
   }
 

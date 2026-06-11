@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 class NoteModel {
   final String id;          // [NEW] Unique ID for reliable lookups
   final int keyIndex;       // 0 to 87 (Which piano key)
-  double height;            // Duration/Height of the rect
+  double height;            // Visual height (Key press duration)
+  double playingHeight;     // Sound duration (Key press + Sustain)
   final Color color;        // Green (white key) or Blue (black key)
   Color? overrideColor;     // [NEW] Individual color override
   final String chordId;     // To group notes in "Mode Accord"
@@ -18,6 +19,7 @@ class NoteModel {
     String? id,
     required this.keyIndex,
     required this.height,
+    double? playingHeight,
     required this.color,
     this.overrideColor,
     required this.chordId,
@@ -25,13 +27,15 @@ class NoteModel {
     this.fromMidi = false,
     this.velocity = 100, // Default to standard volume
     this.currentOffset = 0.0,
-  }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString() + keyIndex.toString();
+  }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString() + keyIndex.toString(),
+       playingHeight = playingHeight ?? height;
 
   // Convert to JSON
   Map<String, dynamic> toJson() => {
     'id': id,
     'keyIndex': keyIndex,
     'height': height,
+    'playingHeight': playingHeight,
     'color': color.toARGB32(),
     'overrideColor': overrideColor?.toARGB32(),
     'chordId': chordId,
@@ -46,6 +50,7 @@ class NoteModel {
       id: json['id'],
       keyIndex: json['keyIndex'],
       height: json['height'],
+      playingHeight: json['playingHeight'] ?? json['height'],
       color: Color(json['color']),
       overrideColor: json['overrideColor'] != null ? Color(json['overrideColor']) : null,
       chordId: json['chordId'],

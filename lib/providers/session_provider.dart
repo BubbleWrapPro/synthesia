@@ -74,6 +74,14 @@ class SessionProvider with ChangeNotifier {
         int note = call.arguments as int;
         _activeKeys.remove(note - 21); // Logic for PianoKeyboard feedback
         _handleMidiNoteOff(note);
+      } else if (call.method == "onControlChange") {
+        final Map<dynamic, dynamic> args = call.arguments as Map<dynamic, dynamic>;
+        int controller = args['controller'] as int;
+        int value = args['value'] as int;
+
+        if (controller == 64) { // Sustain Pedal
+          _handleSustain(value >= 64);
+        }
       }
     });
   }
@@ -109,8 +117,13 @@ class SessionProvider with ChangeNotifier {
   // Variables pour l'enregistrement MIDI temps réel (Recording)
   Timer? _recordingTimer;
   bool _isRecording = false;
+  bool _isSustainDown = false;
   // On stocke les notes actives par leur keyIndex pour pouvoir les retrouver et les allonger
   final Map<int, NoteModel> _activeRecordingNotes = {};
+  // Notes qui continuent de sonner grâce à la pédale de sustain
+  final Map<int, NoteModel> _sustainedNotes = {};
+  // Volume "en direct" pour calculer la décroissance du sustain
+  final Map<int, double> _liveDecayVelocities = {};
 
   // Variables pour la détection d'accords en temps réel (Fix 1)
   DateTime? _lastMidiNoteTime;
@@ -149,6 +162,12 @@ class SessionProvider with ChangeNotifier {
     int keyIndex = midiNote - 21;
     if (keyIndex < 0 || keyIndex > 87) return;
 
+    // Si la note était en "sustain", on la stoppe proprement avant de la rejouer
+    if (_sustainedNotes.containsKey(keyIndex)) {
+      _stopNote(midiNote);
+      _sustainedNotes.remove(keyIndex);
+    }
+
     // 2. Détermination de la couleur
     int semitone = midiNote % 12;
     bool isBlack = [1, 3, 6, 8, 10].contains(semitone); // C#, D#, F#, G#, A#
@@ -171,6 +190,7 @@ class SessionProvider with ChangeNotifier {
     NoteModel newNote = NoteModel(
       keyIndex: keyIndex,
       height: 0.01,
+      playingHeight: 0.01,
       color: isBlack ? Colors.blue : Colors.lightGreen,
       chordId: _currentMidiChordId, // Utilise l'ID intelligent (Fix 1)
       currentOffset: 0.0, // Elle apparaît tout en bas (le présent)
@@ -182,15 +202,39 @@ class SessionProvider with ChangeNotifier {
 
     // 4. On l'ajoute aux notes "actives" (enfoncées)
     _activeRecordingNotes[keyIndex] = newNote;
+    _liveDecayVelocities[keyIndex] = velocity.toDouble();
 
     notifyListeners();
   }
 
   void _handleMidiNoteOff(int midiNote) {
-    _stopNote(midiNote);
     int keyIndex = midiNote - 21;
-    // On retire la note des actives : elle arrêtera de grandir et commencera à monter
-    _activeRecordingNotes.remove(keyIndex);
+
+    if (_isSustainDown) {
+      // La note continue de sonner grâce au sustain
+      if (_activeRecordingNotes.containsKey(keyIndex)) {
+        _sustainedNotes[keyIndex] = _activeRecordingNotes[keyIndex]!;
+        _activeRecordingNotes.remove(keyIndex);
+      }
+    } else {
+      _stopNote(midiNote);
+      _activeRecordingNotes.remove(keyIndex);
+      _sustainedNotes.remove(keyIndex);
+      _liveDecayVelocities.remove(keyIndex);
+    }
+  }
+
+  void _handleSustain(bool down) {
+    _isSustainDown = down;
+    if (!down) {
+      // On relâche la pédale : toutes les notes en sustain s'arrêtent
+      _sustainedNotes.forEach((keyIndex, note) {
+        _stopNote(keyIndex + 21);
+        _liveDecayVelocities.remove(keyIndex);
+      });
+      _sustainedNotes.clear();
+    }
+    notifyListeners();
   }
 
   void startRecordingLoop() {
@@ -201,16 +245,9 @@ class SessionProvider with ChangeNotifier {
 
     // Boucle à ~60 FPS (16ms)
     _recordingTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
-      // 1. Debugging : Voir l'état quand ça devrait s'arrêter
-      if (_activeRecordingNotes.isNotEmpty) {
-        // Décommenter la ligne suivante si on veut voir quelles touches sont bloquées dans la console
-        // debugPrint("Touches actives: ${_activeRecordingNotes.keys.toList()}");
-      }
-
-      // 2. Condition d'arrêt (Pause)
+      // 1. Condition d'arrêt (Pause)
       // Si aucune note n'est maintenue ET que l'option AutoSilence est décochée
-      if (_activeRecordingNotes.isEmpty && !_autoSilence) {
-        // On ne fait rien (PAUSE), le papier arrête de défiler
+      if (_activeRecordingNotes.isEmpty && _sustainedNotes.isEmpty && !_autoSilence) {
         return;
       }
 
@@ -223,30 +260,35 @@ class SessionProvider with ChangeNotifier {
         NoteModel note = _session[i];
 
         // Cas 1 : La note est encore enfoncée (Active)
-        // Elle doit rester en bas (offset 0) mais grandir
+        // Elle doit rester en bas (offset 0) mais grandir (visuel + son)
         if (_activeRecordingNotes.containsValue(note)) {
-
-          // Note : Comme 'height' est final dans votre modèle, on doit remplacer l'objet
-          // Si vous avez retiré 'final' devant height dans NoteModel, vous pouvez faire note.height += speed;
-          NoteModel grownNote = NoteModel(
-            id: note.id,
-            keyIndex: note.keyIndex,
-            height: note.height + speed, // Elle grandit
-            color: note.color,
-            overrideColor: note.overrideColor,
-            chordId: note.chordId,
-            isSilence: note.isSilence,
-            currentOffset: 0.0, // Reste ancrée en bas
-            fromMidi: note.fromMidi,
-            velocity: note.velocity,
-          );
-
-          _session[i] = grownNote;
-          // IMPORTANT : Mettre à jour la référence dans la map des actives aussi
-          _activeRecordingNotes[note.keyIndex] = grownNote;
-
+          note.height += speed;
+          note.playingHeight += speed;
+          note.currentOffset = 0.0;
         }
-        // Cas 2 : La note est relâchée (Inactive)
+        // Cas 2 : La note est en sustain (Relâchée mais pédale enfoncée)
+        // Elle monte car physiquement relâchée, mais sa durée sonore (playingHeight) augmente
+        // Et sa vélocité diminue progressivement
+        else if (_sustainedNotes.containsKey(note.keyIndex) && _sustainedNotes[note.keyIndex] == note) {
+          note.playingHeight += speed;
+          note.currentOffset += speed;
+
+          // Décroissance du volume (Sustain Decay)
+          // On réduit d'environ 1% par frame (arbitraire, ajustable)
+          double currentV = _liveDecayVelocities[note.keyIndex] ?? 0;
+          if (currentV > 0) {
+            double decay = (currentV * 0.01).clamp(0.5, 5.0);
+            double newV = (currentV - decay).clamp(0, 127);
+            _liveDecayVelocities[note.keyIndex] = newV;
+
+            if (newV <= 0) {
+              _stopNote(note.keyIndex + 21);
+              _sustainedNotes.remove(note.keyIndex);
+              _liveDecayVelocities.remove(note.keyIndex);
+            }
+          }
+        }
+        // Cas 3 : La note est relâchée (Inactive)
         // Elle garde sa taille mais monte vers le haut (le passé)
         else {
           note.currentOffset += speed;
@@ -260,6 +302,9 @@ class SessionProvider with ChangeNotifier {
     _isRecording = false;
     _recordingTimer?.cancel();
     _activeRecordingNotes.clear();
+    _sustainedNotes.clear();
+    _liveDecayVelocities.clear();
+    _isSustainDown = false;
     notifyListeners();
   }
 
@@ -390,11 +435,14 @@ class SessionProvider with ChangeNotifier {
 
       // Nettoyage : Supprimer les notes passées sous le clavier
       _activeFallingNotes.removeWhere((n) {
-        bool passedBottom = n.currentOffset + (n.height * pixelRatio) < 0;
-        if (passedBottom && !n.isSilence) {
+        // La note visuelle s'arrête à 'height', mais le son s'arrête à 'playingHeight'
+        bool soundFinished = n.currentOffset + (n.playingHeight * pixelRatio) < 0;
+        
+        if (soundFinished && !n.isSilence) {
           _stopNote(n.keyIndex + 21);
         }
-        return passedBottom;
+        
+        return soundFinished;
       });
 
       // Si l'injection est finie et que tout est tombé, on arrête proprement
@@ -418,6 +466,7 @@ class SessionProvider with ChangeNotifier {
         id: note.id,
         keyIndex: note.keyIndex,
         height: note.height,
+        playingHeight: note.playingHeight,
         color: note.color,
         overrideColor: note.overrideColor,
         chordId: note.chordId,
@@ -599,6 +648,7 @@ class SessionProvider with ChangeNotifier {
         id: note.id,
         keyIndex: note.keyIndex, 
         height: newH, 
+        playingHeight: note.playingHeight == note.height ? newH : note.playingHeight,
         color: note.color,
         overrideColor: newC,
         chordId: note.chordId, 
@@ -665,26 +715,39 @@ class SessionProvider with ChangeNotifier {
       List<NoteModel> rawNotes = [];
       int ppq = parsedMidi.header.ticksPerBeat ?? 120;
       int currentBpm = 120;
-      int totalEvents = 0;
-      int skippedNotes = 0;
 
       debugPrint("MIDI Header: PPQ=$ppq, Tracks=${parsedMidi.tracks.length}");
 
       for (int t = 0; t < parsedMidi.tracks.length; t++) {
         var track = parsedMidi.tracks[t];
         int absoluteTime = 0;
-        Map<int, int> activeNotes = {};
-        Map<int, int> activeVelocities = {};
+        
+        // On suit l'état des notes en cours
+        // Key: MIDI note number
+        // Value: Map avec startTime, velocity, et éventuellement visualDuration
+        Map<int, Map<String, dynamic>> activeNotes = {};
+        bool isSustainPedalDown = false;
+        // Notes dont la touche est relâchée mais qui attendent la fin du sustain
+        List<Map<String, dynamic>> notesWaitingForSustain = [];
 
         for (var event in track) {
           absoluteTime += event.deltaTime;
-          totalEvents++;
 
           if (event is SetTempoEvent) {
             currentBpm = (60000000 / event.microsecondsPerBeat).round();
             _bpm = currentBpm;
-            debugPrint("Tempo change: $currentBpm BPM");
             continue;
+          }
+
+          if (event is ControllerEvent && event.controllerType == 64) {
+            isSustainPedalDown = event.value >= 64;
+            if (!isSustainPedalDown) {
+              // Fin du sustain : on finalise toutes les notes qui attendaient
+              for (var noteData in notesWaitingForSustain) {
+                _finalizeMidiNote(noteData, absoluteTime, ppq, currentBpm, rawNotes);
+              }
+              notesWaitingForSustain.clear();
+            }
           }
 
           int? currentNote;
@@ -704,49 +767,35 @@ class SessionProvider with ChangeNotifier {
 
           if (currentNote != null) {
             if (isNoteOn) {
-              activeNotes[currentNote] = absoluteTime;
-              activeVelocities[currentNote] = velocity;
+              activeNotes[currentNote] = {
+                'noteNumber': currentNote,
+                'startTime': absoluteTime,
+                'velocity': velocity,
+              };
             } else if (isNoteOff) {
               if (activeNotes.containsKey(currentNote)) {
-                int startTime = activeNotes[currentNote]!;
-                int durationTicks = absoluteTime - startTime;
-                int recordedVelocity = activeVelocities[currentNote] ?? 100;
-
-                double height = durationTicks / ppq;
-                if (height <= 0) height = 0.05;
-
-                int keyIndex = currentNote - 21;
-
-                if (keyIndex >= 0 && keyIndex <= 87) {
-                  bool isBlack = [1, 3, 6, 8, 10].contains(currentNote % 12);
-                  double msPerTick = (60000.0 / currentBpm) / ppq;
-                  int startMs = (startTime * msPerTick).round();
-
-                  // Important: we use a deterministic date for reconstruction
-                  DateTime fakeStartTime = DateTime.fromMillisecondsSinceEpoch(startMs);
-                  String chordId = fakeStartTime.toIso8601String();
-
-                  rawNotes.add(NoteModel(
-                    keyIndex: keyIndex,
-                    height: height,
-                    color: isBlack ? Colors.blue : Colors.lightGreen,
-                    chordId: chordId,
-                    fromMidi: true,
-                    velocity: recordedVelocity,
-                    currentOffset: 0.0,
-                  ));
+                var noteData = activeNotes[currentNote]!;
+                noteData['visualEndTime'] = absoluteTime;
+                
+                if (isSustainPedalDown) {
+                  notesWaitingForSustain.add(noteData);
                 } else {
-                  skippedNotes++;
+                  _finalizeMidiNote(noteData, absoluteTime, ppq, currentBpm, rawNotes);
                 }
                 activeNotes.remove(currentNote);
-                activeVelocities.remove(currentNote);
               }
             }
           }
         }
+        
+        // Finaliser les notes restées ouvertes à la fin de la piste
+        for (var noteData in notesWaitingForSustain) {
+          _finalizeMidiNote(noteData, absoluteTime, ppq, currentBpm, rawNotes);
+        }
+        for (var noteData in activeNotes.values) {
+          _finalizeMidiNote(noteData, absoluteTime, ppq, currentBpm, rawNotes);
+        }
       }
-
-      debugPrint("MIDI Import Done: ${rawNotes.length} notes, $skippedNotes skipped, $totalEvents events processed.");
 
       if (rawNotes.isNotEmpty) {
         _reconstructMidiOffsets(rawNotes);
@@ -754,11 +803,41 @@ class SessionProvider with ChangeNotifier {
         _currentFileName = file.name;
         _updateSystemTitle();
         notifyListeners();
-      } else {
-        debugPrint("No valid notes found in MIDI file.");
       }
     } catch (e) {
       debugPrint("Erreur import fichier MIDI: $e");
+    }
+  }
+
+  void _finalizeMidiNote(Map<String, dynamic> noteData, int endTime, int ppq, int bpm, List<NoteModel> targetList) {
+    int startTime = noteData['startTime'];
+    int visualEndTime = noteData['visualEndTime'] ?? endTime;
+    int noteNumber = noteData['noteNumber'];
+    int velocity = noteData['velocity'];
+
+    double visualHeight = (visualEndTime - startTime) / ppq;
+    double playingHeight = (endTime - startTime) / ppq;
+    
+    if (visualHeight <= 0) visualHeight = 0.05;
+    if (playingHeight < visualHeight) playingHeight = visualHeight;
+
+    int keyIndex = noteNumber - 21;
+    if (keyIndex >= 0 && keyIndex <= 87) {
+      bool isBlack = [1, 3, 6, 8, 10].contains(noteNumber % 12);
+      double msPerTick = (60000.0 / bpm) / ppq;
+      int startMs = (startTime * msPerTick).round();
+      String chordId = DateTime.fromMillisecondsSinceEpoch(startMs).toIso8601String();
+
+      targetList.add(NoteModel(
+        keyIndex: keyIndex,
+        height: visualHeight,
+        playingHeight: playingHeight,
+        color: isBlack ? Colors.blue : Colors.lightGreen,
+        chordId: chordId,
+        fromMidi: true,
+        velocity: velocity,
+        currentOffset: 0.0,
+      ));
     }
   }
 
