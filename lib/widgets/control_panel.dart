@@ -9,102 +9,147 @@ class ControlPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<SessionProvider>(context);
+    final isEditMode = provider.currentMode == AppMode.edit;
 
-    // Using LayoutBuilder to ensure buttons fit or use a ScrollView
     return Container(
       color: Colors.grey[200],
       padding: const EdgeInsets.all(4.0),
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
-          // 1. Actions File
-          _actionGroup("Fichier", [
-            _btn("Effacer", () => provider.clearSession(), Colors.redAccent),
-            _btn("Sauvegarder (S)", () => provider.saveToFile(), Colors.orange),
-            _btn("Importer (O)", () => provider.importFile(), Colors.orange),
-            _btn("MIDI ↻", () => provider.initMidi(), Colors.blueGrey),
-          ]),
-
-          const VerticalDivider(width: 20),
-
-          // 2. Actions Note/Silence
-          _actionGroup("Édition", [
-            // Toggle Accord
-            Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Text("Accord (A)", style: TextStyle(fontSize: 10)),
-              Switch(
-                value: provider.isChordMode,
-                onChanged: (v) => provider.toggleChordMode(),
-                activeThumbColor: Colors.green,
-                inactiveThumbColor: Colors.grey,
-              )
+          if (isEditMode) ...[
+            // 1. Actions File
+            _actionGroup("Fichier", [
+              _btn("Effacer", () => provider.clearSession(), Colors.redAccent),
+              _btn("Sauvegarder (S)", () => provider.saveToFile(), Colors.orange),
+              _btn("Importer (O)", () => provider.importFile(), Colors.orange),
+              _btn("MIDI ↻", () => provider.initMidi(), Colors.blueGrey),
             ]),
-            const SizedBox(width: 10),
 
-            // Hauteur Défaut
-            SizedBox(
-              width: 50,
-              child: TextField(
-                decoration: const InputDecoration(labelText: "H (def)", counterText: ""),
-                controller: TextEditingController(text: provider.defaultHeight.toString()),
-                keyboardType: TextInputType.number,
-                onSubmitted: (v) => provider.setDefaultHeight(double.tryParse(v) ?? 1.0),
-              ),
-            ),
+            const VerticalDivider(width: 20),
 
-            _btn("Silence (espace)", () => _dialogSilence(context, provider), Colors.grey),
-            _btn("Sup. Silence (retour)", () => _dialogRemoveSilence(context, provider), Colors.grey),
-            _btn("Effacer Note (del)", () => provider.deleteLastNote(context), Colors.grey),
-          ]),
+            // 2. Actions Note/Silence
+            _actionGroup("Édition", [
+              // Toggle Accord
+              Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const Text("Accord (A)", style: TextStyle(fontSize: 10)),
+                Switch(
+                  value: provider.isChordMode,
+                  onChanged: (v) => provider.toggleChordMode(),
+                  activeThumbColor: Colors.green,
+                  inactiveThumbColor: Colors.grey,
+                )
+              ]),
+              const SizedBox(width: 10),
 
-          const VerticalDivider(width: 20),
-
-          // 3. Playback
-          _actionGroup("Lecture", [
-            SizedBox(
-              width: 40,
-              child: TextField(
-                decoration: const InputDecoration(labelText: "BPM"),
-                controller: TextEditingController(text: provider.bpm.toString()),
-                keyboardType: TextInputType.number,
-                onSubmitted: (v) => provider.setBpm(int.tryParse(v) ?? 60),
-              ),
-            ),
-            const SizedBox(width: 10),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              icon: const Icon(Icons.play_arrow),
-              label: const Text("JOUER (P)"),
-              onPressed: () => provider.playMusic(MediaQuery.of(context).size.height),
-            ),
-          ]),
-
-          const VerticalDivider(width: 20),
-
-          // 4. MIDI Options (AJOUTÉ ICI)
-          _actionGroup("Midi", [
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text("Auto Silence", style: TextStyle(fontSize: 10)),
-                // La taille par défaut de la Checkbox peut être grande, on peut utiliser Transform.scale pour ajuster si besoin
-                Checkbox(
-                  value: provider.autoSilence,
-                  onChanged: (v) => provider.setAutoSilence(v ?? false),
-                  visualDensity: VisualDensity.compact,
+              // Hauteur Défaut
+              SizedBox(
+                width: 50,
+                child: TextField(
+                  decoration: const InputDecoration(labelText: "H (def)", counterText: ""),
+                  controller: TextEditingController(text: provider.defaultHeight.toString()),
+                  keyboardType: TextInputType.number,
+                  onSubmitted: (v) => provider.setDefaultHeight(double.tryParse(v) ?? 1.0),
                 ),
-              ],
-            ),
-          ]),
+              ),
 
-          const VerticalDivider(width: 20),
+              _btn("Silence (espace)", () => _dialogSilence(context, provider), Colors.grey),
+              _btn("Sup. Silence (retour)", () => _dialogRemoveSilence(context, provider), Colors.grey),
+              _btn("Effacer Note (del)", () => provider.deleteLastNote(context), Colors.grey),
+            ]),
 
-          // 5. Apparence
-          _actionGroup("Apparence", [
-            _btn("Style (T)", () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomizationPage()));
-            }, Colors.purple),
-          ]),
+            const VerticalDivider(width: 20),
+          ],
+
+          // 3. Playback / Navigation
+          if (isEditMode)
+            _actionGroup("Navigation", [
+              _btn("◀◀", () {
+                double screenHeight = MediaQuery.of(context).size.height;
+                double pixelRatio = screenHeight / 8.0;
+                provider.seek(-pixelRatio, screenHeight); // Recule d'une unité de hauteur
+              }, Colors.blue),
+              _btn("▶▶", () {
+                double screenHeight = MediaQuery.of(context).size.height;
+                double pixelRatio = screenHeight / 8.0;
+                provider.seek(pixelRatio, screenHeight); // Avance d'une unité de hauteur
+              }, Colors.blue),
+            ]),
+
+          if (isEditMode) ...[
+            const VerticalDivider(width: 20),
+            _actionGroup("Lecture", [
+              SizedBox(
+                width: 40,
+                child: TextField(
+                  decoration: const InputDecoration(labelText: "BPM"),
+                  controller: TextEditingController(text: provider.bpm.toString()),
+                  keyboardType: TextInputType.number,
+                  onSubmitted: (v) => provider.setBpm(int.tryParse(v) ?? 60),
+                ),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                icon: const Icon(Icons.play_arrow),
+                label: const Text("JOUER (P)"),
+                onPressed: () => provider.playMusic(MediaQuery.of(context).size.height),
+              ),
+            ]),
+          ] else ...[
+            // PLAY MODE CONTROLS
+            _actionGroup("Playback", [
+              _btn("Mode Édition", () => provider.setMode(AppMode.edit), Colors.purple),
+              const VerticalDivider(width: 20),
+              _btn("Recommencer", () => provider.restartMusic(MediaQuery.of(context).size.height), Colors.orange),
+              const SizedBox(width: 10),
+              if (provider.isPlaying && !provider.isPaused)
+                _btn("Pause", () => provider.pauseMusic(), Colors.redAccent)
+              else
+                _btn("Reprendre", () => provider.resumeMusic(MediaQuery.of(context).size.height), Colors.green),
+              const SizedBox(width: 10),
+              _btn("◀◀ -5s", () {
+                double screenHeight = MediaQuery.of(context).size.height;
+                double pixelRatio = screenHeight / 8.0;
+                double pixelsPerSecond = pixelRatio * (provider.bpm / 60.0);
+                provider.seek(-5 * pixelsPerSecond, screenHeight);
+              }, Colors.blue),
+              _btn("▶▶ +5s", () {
+                double screenHeight = MediaQuery.of(context).size.height;
+                double pixelRatio = screenHeight / 8.0;
+                double pixelsPerSecond = pixelRatio * (provider.bpm / 60.0);
+                provider.seek(5 * pixelsPerSecond, screenHeight);
+              }, Colors.blue),
+            ]),
+          ],
+
+          if (isEditMode) ...[
+            const VerticalDivider(width: 20),
+
+            // 4. MIDI Options
+            _actionGroup("Midi", [
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text("Auto Silence", style: TextStyle(fontSize: 10)),
+                  Checkbox(
+                    value: provider.autoSilence,
+                    onChanged: (v) => provider.setAutoSilence(v ?? false),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+            ]),
+
+            const VerticalDivider(width: 20),
+
+            // 5. Apparence
+            _actionGroup("Apparence", [
+              _btn("Style (T)", () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomizationPage()));
+              }, Colors.purple),
+            ]),
+          ],
         ],
       ),
     );
