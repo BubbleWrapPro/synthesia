@@ -28,6 +28,21 @@ class ControlPanel extends StatelessWidget {
                     _btn("Sauvegarder (S)", () => provider.saveToFile(), Colors.orange),
                     _btn("Importer (O)", () => provider.importFile(), Colors.orange),
                     _btn("MIDI ↻", () => provider.initMidi(), Colors.blueGrey),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _btn("SoundFont", () => provider.pickAndLoadSoundFont(), Colors.teal),
+                        SizedBox(
+                          width: 80,
+                          child: Text(
+                            provider.currentSoundFontName,
+                            style: const TextStyle(fontSize: 8, color: Colors.grey),
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
                   ]),
 
                   const VerticalDivider(width: 20),
@@ -127,11 +142,11 @@ class ControlPanel extends StatelessWidget {
                   ]),
                 ],
 
-                if (isEditMode) ...[
-                  const VerticalDivider(width: 20),
+                const VerticalDivider(width: 20),
 
-                  // 4. MIDI Options
-                  _actionGroup("Midi", [
+                // 4. MIDI & General
+                _actionGroup("Midi", [
+                  if (isEditMode)
                     Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -143,8 +158,10 @@ class ControlPanel extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ]),
+                  _btn("Panic (Esc)", () => provider.panic(), Colors.red[900]!),
+                ]),
 
+                if (isEditMode) ...[
                   const VerticalDivider(width: 20),
 
                   // 5. Apparence

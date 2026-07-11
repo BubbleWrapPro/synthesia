@@ -113,6 +113,12 @@ class HomeScreen extends StatelessWidget {
             MaterialPageRoute(builder: (_) => const CustomizationPage()),
           );
         },
+
+        // --- 5. SYSTÈME ---
+        // Escape : Panic (Kill all notes)
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          provider.panic();
+        },
       },
       child: Focus(
         autofocus: true, // Important pour attraper les événements clavier

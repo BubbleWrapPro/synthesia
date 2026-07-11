@@ -64,6 +64,81 @@ bool FlutterWindow::OnCreate() {
           flutter_controller_->engine()->messenger(), "com.synthesia.midi",
           &flutter::StandardMethodCodec::GetInstance());
 
+  midi_pro_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "flutter_midi_pro",
+          &flutter::StandardMethodCodec::GetInstance());
+
+  midi_pro_channel_->SetMethodCallHandler(
+      [this](const auto& call, auto result) {
+        if (call.method_name().compare("init") == 0) {
+          result->Success();
+        } else if (call.method_name().compare("loadSoundfont") == 0 ||
+                   call.method_name().compare("loadSoundfontFile") == 0) {
+
+          const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+          if (arguments && fs_synth) {
+            auto path_it = arguments->find(flutter::EncodableValue("path"));
+            if (path_it != arguments->end()) {
+                std::string path = std::get<std::string>(path_it->second);
+
+                // Unload previous if exists
+                if (current_fs_sfid != -1) {
+                    fluid_synth_sfunload(fs_synth, current_fs_sfid, 1);
+                }
+
+                current_fs_sfid = fluid_synth_sfload(fs_synth, path.c_str(), 1);
+                if (current_fs_sfid != -1) {
+                    result->Success(flutter::EncodableValue(current_fs_sfid));
+                } else {
+                    result->Error("FluidSynth Error", "Failed to load SoundFont: " + path);
+                }
+            } else {
+                result->Error("Bad Arguments", "Missing path");
+            }
+          } else {
+            result->Error("FluidSynth Error", "Synth not initialized");
+          }
+
+        } else if (call.method_name().compare("playNote") == 0) {
+          const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+          if (arguments && fs_synth) {
+            int channel = std::get<int>(arguments->at(flutter::EncodableValue("channel")));
+            int note = std::get<int>(arguments->at(flutter::EncodableValue("key")));
+            int velocity = std::get<int>(arguments->at(flutter::EncodableValue("velocity")));
+
+            fluid_synth_noteon(fs_synth, channel, note, velocity);
+            result->Success();
+          } else {
+            result->Error("FluidSynth Error", "Could not play note");
+          }
+        } else if (call.method_name().compare("stopNote") == 0) {
+          const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+          if (arguments && fs_synth) {
+            int channel = std::get<int>(arguments->at(flutter::EncodableValue("channel")));
+            int note = std::get<int>(arguments->at(flutter::EncodableValue("key")));
+
+            fluid_synth_noteoff(fs_synth, channel, note);
+            result->Success();
+          } else {
+            result->Error("FluidSynth Error", "Could not stop note");
+          }
+        } else if (call.method_name().compare("stopAllNotes") == 0 ||
+                   call.method_name().compare("panic") == 0) {
+          if (fs_synth) {
+            for (int i = 0; i < 16; i++) {
+                fluid_synth_all_notes_off(fs_synth, i);
+            }
+            result->Success();
+          } else {
+            result->Error("FluidSynth Error", "Could not stop all notes");
+          }
+        } else if (call.method_name().compare("dispose") == 0) {
+          result->Success();
+        } else {
+          result->NotImplemented();
+        }
+      });
+
   channel_->SetMethodCallHandler(
       [this](const auto& call, auto result) {
         if (call.method_name().compare("setWindowTitle") == 0) {
@@ -108,6 +183,14 @@ bool FlutterWindow::OnCreate() {
   StartMidiInput();
   StartMidiOutput();
 
+  // --- FluidSynth Initialization ---
+  fs_settings = new_fluid_settings();
+  // We use "dsound" (DirectSound) for better compatibility/latency on Windows
+  fluid_settings_setstr(fs_settings, "audio.driver", "dsound");
+  fs_synth = new_fluid_synth(fs_settings);
+  fs_adriver = new_fluid_audio_driver(fs_settings, fs_synth);
+  // ----------------------------------
+
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
 
@@ -124,6 +207,11 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  // FluidSynth Cleanup
+  if (fs_adriver) delete_fluid_audio_driver(fs_adriver);
+  if (fs_synth) delete_fluid_synth(fs_synth);
+  if (fs_settings) delete_fluid_settings(fs_settings);
+
   if (hMidiIn) {
     midiInStop(hMidiIn);
     midiInClose(hMidiIn);

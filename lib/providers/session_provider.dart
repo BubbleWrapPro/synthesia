@@ -7,6 +7,7 @@ import '../models/note_model.dart';
 import 'package:flutter/services.dart';
 import 'package:dart_midi_pro/dart_midi_pro.dart';
 import 'package:flutter_midi/flutter_midi.dart';
+import 'package:flutter_midi_pro/flutter_midi_pro.dart';
 
 enum AppMode { edit, play }
 
@@ -15,35 +16,88 @@ class SessionProvider with ChangeNotifier {
   // --- CONFIGURATION MIDI ---
   static const MethodChannel _midiChannel = MethodChannel('com.synthesia.midi');
   final FlutterMidi _flutterMidi = FlutterMidi();
+  final MidiPro _midiPro = MidiPro();
+  bool _isCustomSf2LoadedOnWindows = false;
+  int _currentSfId = 1;
+  bool _isMidiProInitialized = false;
 
   SessionProvider() {
     _initMidiListener();
     _loadSoundFont();
   }
 
+  Future<void> _ensureMidiProInitialized() async {
+    if (!_isMidiProInitialized) {
+      try {
+        await _midiPro.init();
+        _isMidiProInitialized = true;
+      } catch (e) {
+        debugPrint("Error initializing MidiPro: $e");
+      }
+    }
+  }
+
   Future<void> _loadSoundFont() async {
     if (Platform.isWindows) {
-      debugPrint("Windows: Using system MIDI synth (SF2 ignored for now)");
+      debugPrint("Windows: Using default system MIDI synth (Microsoft GS Wavetable Synth)");
+      _currentSoundFontName = "Windows GS Synth";
+      _isCustomSf2LoadedOnWindows = false;
       return;
     }
     try {
+      // Default sound for mobile
       ByteData byteData = await rootBundle.load("assets/sounds/Piano_1.sf2");
-      _flutterMidi.prepare(sf2: byteData, name: "Piano_1.sf2");
+      await _flutterMidi.prepare(sf2: byteData, name: "Piano_1.sf2");
+      _currentSoundFontName = "Piano_1.sf2";
       debugPrint("SoundFont loaded: Piano_1.sf2");
     } catch (e) {
-      debugPrint("Error loading SoundFont: $e");
+      debugPrint("Error loading default SoundFont: $e");
+    }
+  }
+
+  Future<void> pickAndLoadSoundFont() async {
+    const XTypeGroup typeGroup = XTypeGroup(label: 'SoundFonts', extensions: <String>['sf2']);
+    final XFile? file = await openFile(acceptedTypeGroups: [typeGroup]);
+
+    if (file != null) {
+      debugPrint("--- LOADING SF2 ---");
+      
+      try {
+        if (Platform.isWindows) {
+          await _ensureMidiProInitialized();
+          // Version 4.0.4+ supports absolute paths on Windows via FluidSynth
+          _currentSfId = await _midiPro.loadSoundfontFile(filePath: file.path);
+          _currentSoundFontName = file.name;
+          _isCustomSf2LoadedOnWindows = true;
+          debugPrint("Windows: Loaded SF2 via flutter_midi_pro: ${file.path}");
+        } else {
+          // Mobile: Bytes-based loading via flutter_midi
+          final Uint8List bytes = await file.readAsBytes();
+          await _flutterMidi.prepare(sf2: ByteData.view(bytes.buffer), name: file.name);
+          _currentSoundFontName = file.name;
+        }
+        
+        notifyListeners();
+      } catch (e) {
+        debugPrint("Error loading SoundFont: $e");
+        _currentSoundFontName = "Load Failed";
+        notifyListeners();
+      }
     }
   }
 
   // --- SOUND HELPERS ---
   void _playNote(int midiNote, {int velocity = 100}) {
     if (Platform.isWindows) {
-      _midiChannel.invokeMethod('playMidiNote', {
-        'note': midiNote,
-        'velocity': velocity,
-      });
-      // Décommentez pour voir le volume des notes
-      // debugPrint("Velocity of $midiNote : $velocity");
+      if (_isCustomSf2LoadedOnWindows) {
+        _midiPro.playNote(key: midiNote, velocity: velocity, sfId: _currentSfId);
+      } else {
+        // Fallback to system synth if no custom SF2 is loaded
+        _midiChannel.invokeMethod('playMidiNote', {
+          'note': midiNote,
+          'velocity': velocity,
+        });
+      }
     } else {
       _flutterMidi.playMidiNote(midi: midiNote);
     }
@@ -51,10 +105,42 @@ class SessionProvider with ChangeNotifier {
 
   void _stopNote(int midiNote) {
     if (Platform.isWindows) {
-      _midiChannel.invokeMethod('stopMidiNote', midiNote);
+      if (_isCustomSf2LoadedOnWindows) {
+        _midiPro.stopNote(key: midiNote, sfId: _currentSfId);
+      } else {
+        _midiChannel.invokeMethod('stopMidiNote', midiNote);
+      }
     } else {
       _flutterMidi.stopMidiNote(midi: midiNote);
     }
+  }
+
+  /// Kills all active notes and resets MIDI state (Panic Button)
+  void panic() {
+    debugPrint("MIDI Panic: Stopping all notes...");
+    
+    if (Platform.isWindows) {
+      if (_isCustomSf2LoadedOnWindows) {
+        _midiPro.stopAllNotes(sfId: _currentSfId);
+      } else {
+        // Manual sweep for Windows System Synth
+        for (int i = 0; i < 128; i++) {
+          _midiChannel.invokeMethod('stopMidiNote', i);
+        }
+      }
+    } else {
+      // Mobile loop
+      for (int i = 0; i < 128; i++) {
+        _flutterMidi.stopMidiNote(midi: i);
+      }
+    }
+
+    _activeKeys.clear();
+    _isSustainDown = false;
+    _sustainedNotes.clear();
+    _activeRecordingNotes.clear();
+    
+    notifyListeners();
   }
 
   void _initMidiListener() {
@@ -98,6 +184,7 @@ class SessionProvider with ChangeNotifier {
   // --- VARIABLES D'ÉTAT ---
   List<NoteModel> _session = [];
   String _currentFileName = ""; // [NEW] Stocke le nom du fichier chargé
+  String _currentSoundFontName = "Piano_1.sf2"; // [NEW] Nom du SoundFont actif
   bool _isChordMode = false;
   double _defaultHeight = 1.0;
   int _bpm = 60;
@@ -138,6 +225,7 @@ class SessionProvider with ChangeNotifier {
   // --- GETTERS ---
   List<NoteModel> get session => _session;
   String get currentFileName => _currentFileName;
+  String get currentSoundFontName => _currentSoundFontName;
   bool get isChordMode => _isChordMode;
   bool get isPlaying => _isPlaying;
   bool get isPaused => _isPaused;
@@ -489,7 +577,7 @@ class SessionProvider with ChangeNotifier {
     try {
       _midiChannel.invokeMethod('setWindowTitle', windowTitle);
     } catch (e) {
-      debugPrint("Native title update failed: $e");
+      // debugPrint("Native title update failed: $e");
     }
   }
 

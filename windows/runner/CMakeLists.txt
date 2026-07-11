@@ -36,7 +36,19 @@ target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
+# FluidSynth Integration
+target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/third_party/fluidsynth/include")
+# Link against the import library (using the MinGW .dll.a which MSVC can often handle)
+target_link_libraries(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/third_party/fluidsynth/lib/libfluidsynth.dll.a")
+
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app winmm)
+
+# Copy FluidSynth DLLs to output directory
+add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+  "${CMAKE_SOURCE_DIR}/third_party/fluidsynth/bin"
+  "$<TARGET_FILE_DIR:${BINARY_NAME}>"
+)
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
