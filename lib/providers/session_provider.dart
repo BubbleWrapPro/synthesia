@@ -194,17 +194,17 @@ class SessionProvider with ChangeNotifier {
   }
 
   void seek(double amount, double screenHeight) {
-    // TODO : fix because it deletes all notes
-    // Si on cherche, on doit arrêter les sons en cours pour éviter les notes fantômes
+    // Stop currently playing sounds to prevent "ghost notes"
     for (var note in _activeFallingNotes) {
       if (!note.isSilence) _stopNote(note.keyIndex + 21);
     }
     _activeFallingNotes.clear();
+    _fallingNotes.clear();
 
     _playbackPosition += amount;
     if (_playbackPosition < 0) _playbackPosition = 0;
     
-    // Calcul de l'offset max pour borner le seek en avant
+    // Calculate max song position
     double maxOffset = 0;
     for (var n in _session) {
       if (n.currentOffset + n.height > maxOffset) maxOffset = n.currentOffset + n.height;
@@ -213,11 +213,43 @@ class SessionProvider with ChangeNotifier {
     double maxPos = maxOffset * pixelRatio;
     if (_playbackPosition > maxPos) _playbackPosition = maxPos;
 
-    // Si on est en train de jouer, on relance pour recalculer les positions
-    if (_isPlaying && !_isPaused) {
-      playMusic(screenHeight);
-    } else {
-      notifyListeners();
+    // Recalculate which notes should be visible at this new position
+    _recalculateActiveFallingNotes(screenHeight, maxOffset);
+
+    // If we are playing and not paused, the timer will pick up from here.
+    // Otherwise, we just notify listeners to update the static view.
+    notifyListeners();
+  }
+
+  void _recalculateActiveFallingNotes(double screenHeight, double maxOffset) {
+    double cascadeHeight = screenHeight * (5.0 / 9.0);
+    double pixelRatio = screenHeight / 8.0;
+
+    _activeFallingNotes.clear();
+    _fallingNotes.clear();
+
+    for (var note in _session) {
+      double noteStartInSong = (maxOffset - (note.currentOffset + note.height)) * pixelRatio;
+      double playingEndInSong = (maxOffset - (note.currentOffset + note.height - note.playingHeight)) * pixelRatio;
+
+      // If the note is currently active (visually or sonically) at _playbackPosition
+      if (noteStartInSong <= _playbackPosition && playingEndInSong > _playbackPosition) {
+        final fNote = NoteModel(
+          id: note.id,
+          keyIndex: note.keyIndex,
+          height: note.height,
+          playingHeight: note.playingHeight,
+          color: note.color,
+          overrideColor: note.overrideColor,
+          chordId: note.chordId,
+          isSilence: note.isSilence,
+          currentOffset: cascadeHeight - (_playbackPosition - noteStartInSong),
+          fromMidi: note.fromMidi,
+          velocity: note.velocity,
+        );
+        _activeFallingNotes.add(fNote);
+        _fallingNotes.add(fNote);
+      }
     }
   }
 
@@ -484,7 +516,9 @@ class SessionProvider with ChangeNotifier {
     
     _isPlaying = true;
     _isPaused = false;
+    _injectionDone = false;
     _activeFallingNotes = [];
+    _fallingNotes.clear();
     notifyListeners();
 
     // 1. Moteur physique (Timer de descente)
@@ -505,29 +539,7 @@ class SessionProvider with ChangeNotifier {
     }
 
     // On pré-remplit les notes actives qui sont déjà dans la zone de chute
-    // On doit inclure les notes qui ont commencé ET celles qui sont sur le point de passer
-    for (var note in _session) {
-      double noteStartInSong = (maxOffset - (note.currentOffset + note.height)) * pixelRatio;
-      double noteEndInSong = (maxOffset - note.currentOffset) * pixelRatio;
-      double playingEndInSong = (maxOffset - (note.currentOffset + note.height - note.playingHeight)) * pixelRatio;
-
-      // Si la note est "active" visuellement ou sonorement à _playbackPosition
-      if (noteStartInSong <= _playbackPosition && playingEndInSong > _playbackPosition) {
-         _activeFallingNotes.add(NoteModel(
-          id: note.id,
-          keyIndex: note.keyIndex,
-          height: note.height,
-          playingHeight: note.playingHeight,
-          color: note.color,
-          overrideColor: note.overrideColor,
-          chordId: note.chordId,
-          isSilence: note.isSilence,
-          currentOffset: cascadeHeight - (_playbackPosition - noteStartInSong),
-          fromMidi: note.fromMidi,
-          velocity: note.velocity,
-        ));
-      }
-    }
+    _recalculateActiveFallingNotes(screenHeight, maxOffset);
 
     _animTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
       if (!_isPlaying || _isPaused) {
@@ -539,14 +551,25 @@ class SessionProvider with ChangeNotifier {
       double oldPlaybackPos = _playbackPosition;
       _playbackPosition += movement;
 
+      // Update _animationScrollY as a normalized progress (0.0 to 1.0)
+      if (maxOffset > 0) {
+        double pixelRatio = screenHeight / 8.0;
+        _animationScrollY = (_playbackPosition / (maxOffset * pixelRatio)).clamp(0.0, 1.0);
+      }
+
       // 1. Déclencher les nouvelles notes de la session
+      bool anyNoteLeftToInject = false;
       for (var note in _session) {
         double noteStartInSong = (maxOffset - (note.currentOffset + note.height)) * pixelRatio;
         
+        if (noteStartInSong > _playbackPosition) {
+          anyNoteLeftToInject = true;
+        }
+
         // Si la note doit commencer dans cette frame
         if (noteStartInSong >= oldPlaybackPos && noteStartInSong < _playbackPosition) {
           if (!note.isSilence) {
-            _activeFallingNotes.add(NoteModel(
+            final fallingNote = NoteModel(
               id: note.id,
               keyIndex: note.keyIndex,
               height: note.height,
@@ -558,33 +581,38 @@ class SessionProvider with ChangeNotifier {
               currentOffset: cascadeHeight, // Elle commence en haut
               fromMidi: note.fromMidi,
               velocity: note.velocity,
-            ));
+            );
+            _activeFallingNotes.add(fallingNote);
+            _fallingNotes.add(fallingNote); 
           }
         }
       }
+
+      _injectionDone = !anyNoteLeftToInject;
 
       // 2. Faire descendre les notes actives
       for (var note in _activeFallingNotes) {
         double oldOffset = note.currentOffset;
         note.currentOffset -= movement;
 
-        // Déclenchement du son à l'impact (offset 0)
-        if (oldOffset >= 0 && note.currentOffset < 0 && !note.isSilence) {
+        // Déclenchement du son à l'impact (offset 0 + _fallingY)
+        if (oldOffset >= _fallingY && note.currentOffset < _fallingY && !note.isSilence) {
           _playNote(note.keyIndex + 21, velocity: note.velocity);
         }
       }
 
       // 3. Nettoyage
       _activeFallingNotes.removeWhere((n) {
-        bool soundFinished = n.currentOffset + (n.playingHeight * pixelRatio) < 0;
+        bool soundFinished = n.currentOffset + (n.playingHeight * pixelRatio) < _fallingY;
         if (soundFinished && !n.isSilence) {
           _stopNote(n.keyIndex + 21);
+          _fallingNotes.remove(n);
         }
         return soundFinished;
       });
 
-      // Fin du morceau
-      if (_playbackPosition > (maxOffset * pixelRatio) + cascadeHeight) {
+      // Fin du morceau : Plus rien à injecter et plus de notes actives
+      if (_injectionDone && _activeFallingNotes.isEmpty) {
         _isPlaying = false;
         timer.cancel();
       }
@@ -597,12 +625,14 @@ class SessionProvider with ChangeNotifier {
     _isPlaying = false;
     _isPaused = false;
     _playbackPosition = 0.0;
+    _animationScrollY = 0.0;
     for (var note in _activeFallingNotes) {
       if (!note.isSilence) {
         _stopNote(note.keyIndex + 21);
       }
     }
     _activeFallingNotes.clear();
+    _fallingNotes.clear();
     _animTimer?.cancel();
     notifyListeners();
   }
