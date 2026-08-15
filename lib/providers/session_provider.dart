@@ -203,6 +203,9 @@ class SessionProvider with ChangeNotifier {
   // Variables pour l'animation de lecture (Playback)
   double _animationScrollY = 0.0;
   Timer? _animTimer;
+  final List<NoteModel> _fallingNotes = [];
+  final double _fallingY = 0.0;
+  List<NoteModel> _activeFallingNotes = []; // Pour le playback
 
   // Variables pour l'enregistrement MIDI temps réel (Recording)
   Timer? _recordingTimer;
@@ -228,10 +231,13 @@ class SessionProvider with ChangeNotifier {
   bool get isPaused => _isPaused;
   AppMode get currentMode => _currentMode;
   double get playbackPosition => _playbackPosition;
-  Set<int> get activeKeys => _activeKeys; 
+  Set<int> get activeKeys => _activeKeys; // [NEW] Expose active keys for PianoKeyboard
   double get defaultHeight => _defaultHeight;
   int get bpm => _bpm;
   double get animationScrollY => _animationScrollY;
+  List<NoteModel> get fallingNotes => _fallingNotes;
+  double get fallingY => _fallingY;
+  List<NoteModel> get activeFallingNotes => _activeFallingNotes;
   bool get autoSilence => _autoSilence;
 
 
@@ -245,8 +251,7 @@ class SessionProvider with ChangeNotifier {
   void setMode(AppMode mode) {
     _currentMode = mode;
     if (mode == AppMode.edit) {
-      // On garde la position de lecture en mode édition pour permettre le défilement
-      pauseMusic();
+      stopMusic();
     }
     notifyListeners();
   }
@@ -254,45 +259,86 @@ class SessionProvider with ChangeNotifier {
   void pauseMusic() {
     if (!_isPlaying || _isPaused) return;
     _isPaused = true;
-    
-    // On coupe tous les sons
-    for (int i = 0; i < 128; i++) {
-      _stopNote(i);
+    // Arrêter tous les sons en cours
+    for (var note in _activeFallingNotes) {
+      if (!note.isSilence) {
+        _stopNote(note.keyIndex + 21);
+      }
     }
-
     _animTimer?.cancel();
     notifyListeners();
   }
 
-  void resumeMusic() {
+  void resumeMusic(double screenHeight) {
     if (!_isPlaying || !_isPaused) return;
     _isPaused = false;
-    playMusic(); 
+    playMusic(screenHeight); // playMusic will handle resuming from _playbackPosition
   }
 
-  void restartMusic() {
+  void restartMusic(double screenHeight) {
     stopMusic();
     _playbackPosition = 0.0;
-    playMusic();
+    playMusic(screenHeight);
   }
 
-  void seek(double units) {
+  void seek(double amount, double screenHeight) {
     // Stop currently playing sounds to prevent "ghost notes"
-    for (int i = 0; i < 128; i++) {
-      _stopNote(i);
+    for (var note in _activeFallingNotes) {
+      if (!note.isSilence) _stopNote(note.keyIndex + 21);
     }
+    _activeFallingNotes.clear();
+    _fallingNotes.clear();
 
-    _playbackPosition += units;
+    _playbackPosition += amount;
     if (_playbackPosition < 0) _playbackPosition = 0;
     
-    // Calculate max song position (in units/beats)
+    // Calculate max song position
     double maxOffset = 0;
     for (var n in _session) {
       if (n.currentOffset + n.height > maxOffset) maxOffset = n.currentOffset + n.height;
     }
-    if (_playbackPosition > maxOffset) _playbackPosition = maxOffset;
+    double pixelRatio = screenHeight / 8.0;
+    double maxPos = maxOffset * pixelRatio;
+    if (_playbackPosition > maxPos) _playbackPosition = maxPos;
 
+    // Recalculate which notes should be visible at this new position
+    _recalculateActiveFallingNotes(screenHeight, maxOffset);
+
+    // If we are playing and not paused, the timer will pick up from here.
+    // Otherwise, we just notify listeners to update the static view.
     notifyListeners();
+  }
+
+  void _recalculateActiveFallingNotes(double screenHeight, double maxOffset) {
+    double cascadeHeight = screenHeight * (5.0 / 9.0);
+    double pixelRatio = screenHeight / 8.0;
+
+    _activeFallingNotes.clear();
+    _fallingNotes.clear();
+
+    for (var note in _session) {
+      double noteStartInSong = (maxOffset - (note.currentOffset + note.height)) * pixelRatio;
+      double playingEndInSong = (maxOffset - (note.currentOffset + note.height - note.playingHeight)) * pixelRatio;
+
+      // If the note is currently active (visually or sonically) at _playbackPosition
+      if (noteStartInSong <= _playbackPosition && playingEndInSong > _playbackPosition) {
+        final fNote = NoteModel(
+          id: note.id,
+          keyIndex: note.keyIndex,
+          height: note.height,
+          playingHeight: note.playingHeight,
+          color: note.color,
+          overrideColor: note.overrideColor,
+          chordId: note.chordId,
+          isSilence: note.isSilence,
+          currentOffset: cascadeHeight - (_playbackPosition - noteStartInSong),
+          fromMidi: note.fromMidi,
+          velocity: note.velocity,
+        );
+        _activeFallingNotes.add(fNote);
+        _fallingNotes.add(fNote);
+      }
+    }
   }
 
   void _handleMidiNoteOn(int midiNote, {int velocity = 100}) {
@@ -542,7 +588,7 @@ class SessionProvider with ChangeNotifier {
 
   // --- LOGIQUE JOUER (PLAYBACK) ---
 
-  void playMusic() {
+  void playMusic(double screenHeight) {
     if (_session.isEmpty) return;
 
     // Si on change de mode sans passer par stopMusic()
@@ -559,13 +605,19 @@ class SessionProvider with ChangeNotifier {
     _isPlaying = true;
     _isPaused = false;
     _injectionDone = false;
+    _activeFallingNotes = [];
+    _fallingNotes.clear();
     notifyListeners();
 
     // 1. Moteur physique (Timer de descente)
-    // On travaille maintenant en UNITÉS (Beats) par frame
-    // 16ms = 0.016s. Units = (bpm / 60) * 0.016
-    double unitsPerFrame = (_bpm / 60.0) * 0.016;
+    double cascadeHeight = screenHeight * (5.0 / 9.0);
+    double pixelRatio = screenHeight / 8.0;
+    double pixelsPerMs = (pixelRatio * (_bpm / 60.0)) / 1000.0;
 
+    // --- CORRECTION DIRECTION ---
+    // Dans Synthesia, les notes avec de grands offsets sont au DEBUT du morceau (plus haut)
+    // Les notes avec offset 0 sont à la FIN (présent lors de l'enregistrement)
+    
     // Trouver l'offset maximum (le début réel du morceau)
     double maxOffset = 0;
     for (var n in _session) {
@@ -574,50 +626,81 @@ class SessionProvider with ChangeNotifier {
       }
     }
 
+    // On pré-remplit les notes actives qui sont déjà dans la zone de chute
+    _recalculateActiveFallingNotes(screenHeight, maxOffset);
+
     _animTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
       if (!_isPlaying || _isPaused) {
         timer.cancel();
         return;
       }
 
+      double movement = pixelsPerMs * 16.0;
       double oldPlaybackPos = _playbackPosition;
-      _playbackPosition += unitsPerFrame;
+      _playbackPosition += movement;
 
       // Update _animationScrollY as a normalized progress (0.0 to 1.0)
       if (maxOffset > 0) {
-        _animationScrollY = (_playbackPosition / maxOffset).clamp(0.0, 1.0);
+        double pixelRatio = screenHeight / 8.0;
+        _animationScrollY = (_playbackPosition / (maxOffset * pixelRatio)).clamp(0.0, 1.0);
       }
 
       // 1. Déclencher les nouvelles notes de la session
       bool anyNoteLeftToInject = false;
       for (var note in _session) {
-        double noteStartInSong = maxOffset - (note.currentOffset + note.height);
+        double noteStartInSong = (maxOffset - (note.currentOffset + note.height)) * pixelRatio;
         
         if (noteStartInSong > _playbackPosition) {
           anyNoteLeftToInject = true;
+        }
+
+        // Si la note doit commencer dans cette frame
+        if (noteStartInSong >= oldPlaybackPos && noteStartInSong < _playbackPosition) {
+          if (!note.isSilence) {
+            final fallingNote = NoteModel(
+              id: note.id,
+              keyIndex: note.keyIndex,
+              height: note.height,
+              playingHeight: note.playingHeight,
+              color: note.color,
+              overrideColor: note.overrideColor,
+              chordId: note.chordId,
+              isSilence: note.isSilence,
+              currentOffset: cascadeHeight, // Elle commence en haut
+              fromMidi: note.fromMidi,
+              velocity: note.velocity,
+            );
+            _activeFallingNotes.add(fallingNote);
+            _fallingNotes.add(fallingNote); 
+          }
         }
       }
 
       _injectionDone = !anyNoteLeftToInject;
 
-      // 2. Déclencher le son à l'impact
-      for (var note in _session) {
-        if (note.isSilence) continue;
-        double noteStartInSong = maxOffset - (note.currentOffset + note.height);
-        double noteEndInSong = maxOffset - (note.currentOffset + note.height - note.playingHeight);
+      // 2. Faire descendre les notes actives
+      for (var note in _activeFallingNotes) {
+        double oldOffset = note.currentOffset;
+        note.currentOffset -= movement;
 
-        // Déclenchement START
-        if (noteStartInSong >= oldPlaybackPos && noteStartInSong < _playbackPosition) {
-           _playNote(note.keyIndex + 21, velocity: note.velocity);
-        }
-        // Déclenchement STOP
-        if (noteEndInSong >= oldPlaybackPos && noteEndInSong < _playbackPosition) {
-           _stopNote(note.keyIndex + 21);
+        // Déclenchement du son à l'impact (offset 0 + _fallingY)
+        if (oldOffset >= _fallingY && note.currentOffset < _fallingY && !note.isSilence) {
+          _playNote(note.keyIndex + 21, velocity: note.velocity);
         }
       }
 
-      // Fin du morceau
-      if (_injectionDone && _playbackPosition > maxOffset + 2.0) { // +2 pour laisser finir les dernières notes
+      // 3. Nettoyage
+      _activeFallingNotes.removeWhere((n) {
+        bool soundFinished = n.currentOffset + (n.playingHeight * pixelRatio) < _fallingY;
+        if (soundFinished && !n.isSilence) {
+          _stopNote(n.keyIndex + 21);
+          _fallingNotes.remove(n);
+        }
+        return soundFinished;
+      });
+
+      // Fin du morceau : Plus rien à injecter et plus de notes actives
+      if (_injectionDone && _activeFallingNotes.isEmpty) {
         _isPlaying = false;
         timer.cancel();
       }
@@ -631,10 +714,13 @@ class SessionProvider with ChangeNotifier {
     _isPaused = false;
     _playbackPosition = 0.0;
     _animationScrollY = 0.0;
-    // On coupe tous les sons
-    for (int i = 0; i < 128; i++) {
-      _stopNote(i);
+    for (var note in _activeFallingNotes) {
+      if (!note.isSilence) {
+        _stopNote(note.keyIndex + 21);
+      }
     }
+    _activeFallingNotes.clear();
+    _fallingNotes.clear();
     _animTimer?.cancel();
     notifyListeners();
   }
@@ -953,4 +1039,7 @@ class SessionProvider with ChangeNotifier {
       ));
     }
   }
+
+
+
 }

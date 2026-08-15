@@ -41,31 +41,26 @@ class CascadeView extends StatelessWidget {
           }
 
           // 2. Draw Notes
-          List<NoteModel> notesToDraw = session;
+          List<NoteModel> notesToDraw = provider.isPlaying ? provider.activeFallingNotes : session;
           List<Widget> maskedNotes = [];
           List<Widget> unmaskedNotes = [];
           List<Widget> bottomBars = [];
 
           for (var note in notesToDraw) {
-            // Silence logic: only show in Edit mode
-            if (note.isSilence && provider.currentMode != AppMode.edit) continue;
+            if (note.isSilence && !provider.isPlaying) continue; 
+            if (note.isSilence && provider.isPlaying) continue;  
 
             bool isBlack = _isBlackKey(note.keyIndex);
             double width = isBlack ? blackKeyWidth : whiteKeyWidth;
             double left = _calculateLeftPos(note.keyIndex, whiteKeyWidth, blackKeyWidth);
             double height = note.height * pixelRatio;
 
-            // SCROLLING LOGIC: Subtract playbackPosition from currentOffset
-            double bottomPos = (note.currentOffset - provider.playbackPosition) * pixelRatio;
+            double bottomPos = provider.isPlaying ? note.currentOffset : note.currentOffset * pixelRatio;
 
-            // Optimization: don't draw if outside screen
             if (bottomPos > constraints.maxHeight) continue;
-            if (bottomPos + height < 0) continue;
 
             bool hasOverride = note.overrideColor != null;
-            Color noteColor = note.isSilence 
-                ? Colors.grey.withValues(alpha: 0.2) 
-                : (note.overrideColor ?? style.getColorForNote(note.keyIndex));
+            Color noteColor = note.overrideColor ?? style.getColorForNote(note.keyIndex);
 
             final noteTile = Positioned(
               left: left,
@@ -77,7 +72,7 @@ class CascadeView extends StatelessWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     color: noteColor,
-                    gradient: (config.useGradient && !hasOverride && !note.isSilence) ? null : LinearGradient(
+                    gradient: (config.useGradient && !hasOverride) ? null : LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
@@ -87,44 +82,35 @@ class CascadeView extends StatelessWidget {
                       ],
                       stops: const [0.0, 0.4, 1.0],
                     ),
-                    border: Border.all(
-                      color: note.isSilence ? Colors.white10 : Colors.white24, 
-                      width: 0.5,
-                      style: note.isSilence ? BorderStyle.solid : BorderStyle.solid,
-                    ),
+                    border: Border.all(color: Colors.white24, width: 0.5),
                     borderRadius: BorderRadius.circular(1.5),
                   ),
-                  child: note.isSilence 
-                    ? const Center(child: Icon(Icons.music_off, size: 12, color: Colors.white24))
-                    : null,
                 ),
               ),
             );
 
             // Separate notes for masking
-            if (config.useGradient && !hasOverride && !note.isSilence) {
+            if (config.useGradient && !hasOverride) {
               maskedNotes.add(noteTile);
             } else {
               unmaskedNotes.add(noteTile);
             }
 
-            // Always add a bottom bar (except for silence)
-            if (!note.isSilence) {
-              bottomBars.add(Positioned(
-                left: left,
-                bottom: bottomPos,
-                width: width,
-                child: IgnorePointer(
-                  child: Container(
-                    height: 2.0,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.8),
-                      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(1.5)),
-                    ),
+            // Always add a bottom bar on top of everything to ensure separation
+            bottomBars.add(Positioned(
+              left: left,
+              bottom: bottomPos,
+              width: width,
+              child: IgnorePointer(
+                child: Container(
+                  height: 2.0, // Slightly thicker for better visibility
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.8), // Darker for contrast
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(1.5)),
                   ),
                 ),
-              ));
-            }
+              ),
+            ));
           }
 
           Widget maskedLayer = Stack(children: maskedNotes);
