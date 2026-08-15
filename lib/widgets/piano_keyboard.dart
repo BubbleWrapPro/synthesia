@@ -113,24 +113,24 @@ class PianoKeyboard extends StatelessWidget {
   }
 
   Color? _getActiveColor(int index, SessionProvider provider, StyleProvider style, double screenHeight) {
-    // Priority 1: MIDI / Manual active keys
+    // Priority 1: MIDI / Manual active keys (Real-time feedback)
     if (provider.activeKeys.contains(index)) {
       return style.getColorForNote(index);
     }
 
-    // Priority 2: Playback active notes
-    if (provider.isPlaying) {
-      final double pixelRatio = screenHeight / 8.0; 
-      for (var note in provider.activeFallingNotes) {
-        if (note.keyIndex == index) {
-          double noteTop = note.currentOffset + (note.height * pixelRatio);
-          // Check if hitting keyboard (bottom line is 0)
-          if (note.currentOffset <= 0 && noteTop >= 0) {
-            return note.overrideColor ?? style.getColorForNote(index);
-          }
+    // Priority 2: Playback / Edit scroll active notes (Intersection with keyboard line)
+    // We check if any note in the session is currently crossing the "0" line
+    for (var note in provider.session) {
+      if (note.keyIndex == index && !note.isSilence) {
+        double noteBottom = note.currentOffset - provider.playbackPosition;
+        double noteTop = noteBottom + note.height;
+        
+        if (noteBottom <= 0 && noteTop >= 0) {
+          return note.overrideColor ?? style.getColorForNote(index);
         }
       }
     }
+    
     return null;
   }
 

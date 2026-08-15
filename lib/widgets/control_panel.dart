@@ -25,8 +25,8 @@ class ControlPanel extends StatelessWidget {
                   // 1. Actions File
                   _actionGroup("Fichier", [
                     _btn("Effacer", () => provider.clearSession(), Colors.redAccent),
-                    _btn("Sauvegarder (S)", () => provider.saveToFile(), Colors.orange),
-                    _btn("Importer (O)", () => provider.importFile(), Colors.orange),
+                    _btn("Sauvegarder", () => provider.saveToFile(), Colors.orange),
+                    _btn("Importer", () => provider.importFile(), Colors.orange),
                     _btn("MIDI ↻", () => provider.initMidi(), Colors.blueGrey),
                     Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -51,7 +51,7 @@ class ControlPanel extends StatelessWidget {
                   _actionGroup("Édition", [
                     // Toggle Accord
                     Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      const Text("Accord (A)", style: TextStyle(fontSize: 10)),
+                      const Text("Accord", style: TextStyle(fontSize: 10)),
                       Switch(
                         value: provider.isChordMode,
                         onChanged: (v) => provider.toggleChordMode(),
@@ -65,6 +65,7 @@ class ControlPanel extends StatelessWidget {
                     SizedBox(
                       width: 50,
                       child: TextField(
+                        key: ValueKey("h_def_${provider.defaultHeight}"),
                         decoration: const InputDecoration(labelText: "H (def)", counterText: ""),
                         controller: TextEditingController(text: provider.defaultHeight.toString()),
                         keyboardType: TextInputType.number,
@@ -72,9 +73,9 @@ class ControlPanel extends StatelessWidget {
                       ),
                     ),
 
-                    _btn("Silence (espace)", () => _dialogSilence(context, provider), Colors.grey),
-                    _btn("Sup. Silence (retour)", () => _dialogRemoveSilence(context, provider), Colors.grey),
-                    _btn("Effacer Note (del)", () => provider.deleteLastNote(context), Colors.grey),
+                    _btn("Silence", () => _dialogSilence(context, provider), Colors.grey),
+                    _btn("Sup. Silence", () => _dialogRemoveSilence(context, provider), Colors.grey),
+                    _btn("Effacer Note", () => provider.deleteLastNote(context), Colors.grey),
                   ]),
 
                   const VerticalDivider(width: 20),
@@ -84,14 +85,10 @@ class ControlPanel extends StatelessWidget {
                 if (isEditMode)
                   _actionGroup("Navigation", [
                     _btn("◀◀", () {
-                      double screenHeight = MediaQuery.of(context).size.height;
-                      double pixelRatio = screenHeight / 8.0;
-                      provider.seek(-pixelRatio, screenHeight); // Recule d'une unité de hauteur
+                      provider.seek(-1.0); // Recule d'une unité (beat)
                     }, Colors.blue),
                     _btn("▶▶", () {
-                      double screenHeight = MediaQuery.of(context).size.height;
-                      double pixelRatio = screenHeight / 8.0;
-                      provider.seek(pixelRatio, screenHeight); // Avance d'une unité de hauteur
+                      provider.seek(1.0); // Avance d'une unité (beat)
                     }, Colors.blue),
                   ]),
 
@@ -101,6 +98,7 @@ class ControlPanel extends StatelessWidget {
                     SizedBox(
                       width: 40,
                       child: TextField(
+                        key: ValueKey("bpm_${provider.bpm}"),
                         decoration: const InputDecoration(labelText: "BPM"),
                         controller: TextEditingController(text: provider.bpm.toString()),
                         keyboardType: TextInputType.number,
@@ -111,8 +109,8 @@ class ControlPanel extends StatelessWidget {
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                       icon: const Icon(Icons.play_arrow),
-                      label: const Text("JOUER (P)"),
-                      onPressed: () => provider.playMusic(MediaQuery.of(context).size.height),
+                      label: const Text("JOUER"),
+                      onPressed: () => provider.playMusic(),
                     ),
                   ]),
                 ] else ...[
@@ -120,24 +118,21 @@ class ControlPanel extends StatelessWidget {
                   _actionGroup("Playback", [
                     _btn("Mode Édition", () => provider.setMode(AppMode.edit), Colors.purple),
                     const VerticalDivider(width: 20),
-                    _btn("Recommencer", () => provider.restartMusic(MediaQuery.of(context).size.height), Colors.orange),
+                    _btn("Recommencer", () => provider.restartMusic(), Colors.orange),
                     const SizedBox(width: 10),
                     if (provider.isPlaying && !provider.isPaused)
                       _btn("Pause", () => provider.pauseMusic(), Colors.redAccent)
                     else
-                      _btn("Reprendre", () => provider.resumeMusic(MediaQuery.of(context).size.height), Colors.green),
+                      _btn("Reprendre", () => provider.resumeMusic(), Colors.green),
                     const SizedBox(width: 10),
                     _btn("◀◀ -5s", () {
-                      double screenHeight = MediaQuery.of(context).size.height;
-                      double pixelRatio = screenHeight / 8.0;
-                      double pixelsPerSecond = pixelRatio * (provider.bpm / 60.0);
-                      provider.seek(-5 * pixelsPerSecond, screenHeight);
+                      // 5 seconds in beats = 5 * (bpm / 60)
+                      double beats = 5.0 * (provider.bpm / 60.0);
+                      provider.seek(-beats);
                     }, Colors.blue),
                     _btn("▶▶ +5s", () {
-                      double screenHeight = MediaQuery.of(context).size.height;
-                      double pixelRatio = screenHeight / 8.0;
-                      double pixelsPerSecond = pixelRatio * (provider.bpm / 60.0);
-                      provider.seek(5 * pixelsPerSecond, screenHeight);
+                      double beats = 5.0 * (provider.bpm / 60.0);
+                      provider.seek(beats);
                     }, Colors.blue),
                   ]),
                 ],
@@ -166,7 +161,7 @@ class ControlPanel extends StatelessWidget {
 
                   // 5. Apparence
                   _actionGroup("Apparence", [
-                    _btn("Style (T)", () {
+                    _btn("Style", () {
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomizationPage()));
                     }, Colors.purple),
                   ]),

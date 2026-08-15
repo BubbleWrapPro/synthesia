@@ -61,7 +61,6 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<SessionProvider>(context); // Listen: true par défaut, OK ici
-    final screenHeight = MediaQuery.of(context).size.height;
 
     return CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
@@ -69,9 +68,9 @@ class HomeScreen extends StatelessWidget {
         // --- 1. LECTURE (Espace) ---
         const SingleActivator(LogicalKeyboardKey.keyP): () {
           if (provider.isPlaying) {
-            provider.stopMusic();
+            provider.pauseMusic();
           } else {
-            provider.playMusic(screenHeight);
+            provider.playMusic();
           }
         },
 
@@ -95,14 +94,17 @@ class HomeScreen extends StatelessWidget {
           provider.toggleChordMode();
         },
 
-        // S : Ajouter Silence (Ajout rapide de 1 unité pour être fluide)
+        // Space : Ajouter Silence
         const SingleActivator(LogicalKeyboardKey.space): () {
           provider.addSilence(1);
         },
 
-        // Backspace : Supprimer Silence (Suppression rapide de 1 unité)
+        // Backspace / Delete : Supprimer dernier élément
         const SingleActivator(LogicalKeyboardKey.backspace): () {
-          provider.removeSilence(1);
+          provider.deleteLastNote(context);
+        },
+        const SingleActivator(LogicalKeyboardKey.delete): () {
+          provider.deleteLastNote(context);
         },
 
         // --- 4. APPARENCE ---
