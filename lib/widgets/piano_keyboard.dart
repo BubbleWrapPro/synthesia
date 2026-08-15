@@ -24,6 +24,8 @@ class PianoKeyboard extends StatelessWidget {
         List<Widget> whiteOverlays = [];
         List<Widget> blackOverlays = [];
 
+        final double screenHeight = MediaQuery.of(context).size.height;
+
         int whiteKeyCounter = 0;
         for (int i = 0; i < 88; i++) {
           bool isBlack = _isBlackKey(i);
@@ -58,7 +60,7 @@ class PianoKeyboard extends StatelessWidget {
           }
 
           // 2. Active Overlay (The "Pressed" visual)
-          Color? activeColor = _getActiveColor(i, provider, style);
+          Color? activeColor = _getActiveColor(i, provider, style, screenHeight);
           if (activeColor != null) {
             final overlayWidget = Positioned(
               left: left,
@@ -110,7 +112,7 @@ class PianoKeyboard extends StatelessWidget {
     );
   }
 
-  Color? _getActiveColor(int index, SessionProvider provider, StyleProvider style) {
+  Color? _getActiveColor(int index, SessionProvider provider, StyleProvider style, double screenHeight) {
     // Priority 1: MIDI / Manual active keys
     if (provider.activeKeys.contains(index)) {
       return style.getColorForNote(index);
@@ -118,12 +120,11 @@ class PianoKeyboard extends StatelessWidget {
 
     // Priority 2: Playback active notes
     if (provider.isPlaying) {
-      final double pixelRatio = 100.0; // Dummy but consistency doesn't strictly need it for color pick
+      final double pixelRatio = screenHeight / 8.0; 
       for (var note in provider.activeFallingNotes) {
         if (note.keyIndex == index) {
           double noteTop = note.currentOffset + (note.height * pixelRatio);
-          // Check if hitting keyboard (0)
-          // Since we just need the color, the logic is simplified
+          // Check if hitting keyboard (bottom line is 0)
           if (note.currentOffset <= 0 && noteTop >= 0) {
             return note.overrideColor ?? style.getColorForNote(index);
           }

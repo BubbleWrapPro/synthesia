@@ -13,6 +13,8 @@
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 
+#include <fluidsynth.h> // [NEW] FluidSynth Header
+
 #define WM_MIDI_DATA (WM_USER + 100)
 
 // A window that does nothing but host a Flutter view.
@@ -34,10 +36,17 @@ class FlutterWindow : public Win32Window {
   HMIDIIN hMidiIn = NULL;
   HMIDIOUT hMidiOut = NULL;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> midi_pro_channel_;
 
   void StartMidiInput();
   void StartMidiOutput();
   static void CALLBACK MidiInProc(HMIDIIN hMidiIn, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2);
+
+  // FluidSynth Handles
+  fluid_settings_t* fs_settings = nullptr;
+  fluid_synth_t* fs_synth = nullptr;
+  fluid_audio_driver_t* fs_adriver = nullptr;
+  int current_fs_sfid = -1;
 
   // The project to run.
   flutter::DartProject project_;
