@@ -17,160 +17,225 @@ class ControlPanel extends StatelessWidget {
         Expanded(
           child: Container(
             color: Colors.grey[200],
-            padding: const EdgeInsets.all(4.0),
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
                 if (isEditMode) ...[
-                  // 1. Actions File
-                  _actionGroup("Fichier", [
-                    _btn("Effacer", () => provider.clearSession(), Colors.redAccent),
-                    _btn("Sauvegarder (S)", () => provider.saveToFile(), Colors.orange),
-                    _btn("Importer (O)", () => provider.importFile(), Colors.orange),
-                    _btn("MIDI ↻", () => provider.initMidi(), Colors.blueGrey),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _btn("SoundFont", () => provider.pickAndLoadSoundFont(), Colors.teal),
-                        SizedBox(
-                          width: 80,
-                          child: Text(
-                            provider.currentSoundFontName,
-                            style: const TextStyle(fontSize: 8, color: Colors.grey),
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                          ),
+                  // 1. MENU FICHIER
+                  PopupMenuButton<String>(
+                    tooltip: "Fichier",
+                    icon: const Icon(Icons.file_copy, color: Colors.orange),
+                    onSelected: (val) {
+                      if (val == 'clear') provider.clearSession();
+                      if (val == 'save') provider.saveToFile();
+                      if (val == 'load') provider.importFile();
+                      if (val == 'midi') provider.initMidi();
+                      if (val == 'sf2') provider.pickAndLoadSoundFont();
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(value: 'save', child: Text("Sauvegarder (Ctrl+S)")),
+                      const PopupMenuItem(value: 'load', child: Text("Importer (Ctrl+O)")),
+                      const PopupMenuItem(value: 'sf2', child: Text("Charger SoundFont")),
+                      const PopupMenuItem(value: 'midi', child: Text("Réinit MIDI")),
+                      const PopupMenuDivider(),
+                    ],
+                  ),
+
+                  const VerticalDivider(width: 10),
+
+                  // 2. MENU ÉDITION
+                  PopupMenuButton<String>(
+                    tooltip: "Édition",
+                    icon: const Icon(Icons.edit, color: Colors.blue),
+                    onSelected: (val) {
+                      if (val == 'silence') _dialogSilence(context, provider);
+                      if (val == 'rm_silence') _dialogRemoveSilence(context, provider);
+                      if (val == 'del_note') provider.deleteLastNote(context);
+                      if (val == 'chord') provider.toggleChordMode();
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'chord',
+                        child: Row(
+                          children: [
+                            const Text("Mode Accord (A)"),
+                            const Spacer(),
+                            Switch(
+                              value: provider.isChordMode,
+                              onChanged: (v) => provider.toggleChordMode(),
+                              activeThumbColor: Colors.green,
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ]),
-
-                  const VerticalDivider(width: 20),
-
-                  // 2. Actions Note/Silence
-                  _actionGroup("Édition", [
-                    // Toggle Accord
-                    Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      const Text("Accord (A)", style: TextStyle(fontSize: 10)),
-                      Switch(
-                        value: provider.isChordMode,
-                        onChanged: (v) => provider.toggleChordMode(),
-                        activeThumbColor: Colors.green,
-                        inactiveThumbColor: Colors.grey,
-                      )
-                    ]),
-                    const SizedBox(width: 10),
-
-                    // Hauteur Défaut
-                    SizedBox(
-                      width: 50,
-                      child: TextField(
-                        decoration: const InputDecoration(labelText: "H (def)", counterText: ""),
-                        controller: TextEditingController(text: provider.defaultHeight.toString()),
-                        keyboardType: TextInputType.number,
-                        onSubmitted: (v) => provider.setDefaultHeight(double.tryParse(v) ?? 1.0),
                       ),
+                      const PopupMenuItem(value: 'silence', child: Text("Ajouter Silence (Espace)")),
+                      const PopupMenuItem(value: 'rm_silence', child: Text("Suppr. Silence (Retour)")),
+                      const PopupMenuItem(value: 'del_note', child: Text("Effacer Note (Del)")),
+                      const PopupMenuItem(value: 'clear', child: Text("Tout Effacer", style: TextStyle(color: Colors.red))),
+                    ],
+                  ),
+
+                  const VerticalDivider(width: 10),
+
+                  // 3. PISTE (Gardé visible car central)
+                  _actionGroup("Piste", [
+                    DropdownButton<int>(
+                      value: provider.currentTrackId,
+                      underline: Container(),
+                      items: List.generate(10, (index) => DropdownMenuItem(
+                        value: index,
+                        child: Text("T$index", style: const TextStyle(fontWeight: FontWeight.bold)),
+                      )),
+                      onChanged: (v) => provider.setCurrentTrackId(v ?? 0),
                     ),
-
-                    _btn("Silence (espace)", () => _dialogSilence(context, provider), Colors.grey),
-                    _btn("Sup. Silence (retour)", () => _dialogRemoveSilence(context, provider), Colors.grey),
-                    _btn("Effacer Note (del)", () => provider.deleteLastNote(context), Colors.grey),
                   ]),
 
-                  const VerticalDivider(width: 20),
-                ],
+                  const VerticalDivider(width: 10),
 
-                // 3. Playback / Navigation
-                if (isEditMode)
-                  _actionGroup("Navigation", [
-                    _btn("◀◀", () {
-                      double screenHeight = MediaQuery.of(context).size.height;
-                      double pixelRatio = screenHeight / 8.0;
-                      provider.seek(-pixelRatio, screenHeight); // Recule d'une unité de hauteur
-                    }, Colors.blue),
-                    _btn("▶▶", () {
-                      double screenHeight = MediaQuery.of(context).size.height;
-                      double pixelRatio = screenHeight / 8.0;
-                      provider.seek(pixelRatio, screenHeight); // Avance d'une unité de hauteur
-                    }, Colors.blue),
-                  ]),
-
-                if (isEditMode) ...[
-                  const VerticalDivider(width: 20),
+                  // 4. LECTURE & BPM
                   _actionGroup("Lecture", [
                     SizedBox(
-                      width: 40,
+                      width: 45,
                       child: TextField(
-                        decoration: const InputDecoration(labelText: "BPM"),
+                        decoration: const InputDecoration(labelText: "BPM", border: InputBorder.none),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                         controller: TextEditingController(text: provider.bpm.toString()),
                         keyboardType: TextInputType.number,
                         onSubmitted: (v) => provider.setBpm(int.tryParse(v) ?? 60),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                      icon: const Icon(Icons.play_arrow),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                      ),
+                      icon: const Icon(Icons.play_arrow, size: 20),
                       label: const Text("JOUER (P)"),
                       onPressed: () => provider.playMusic(MediaQuery.of(context).size.height),
                     ),
                   ]),
-                ] else ...[
-                  // PLAY MODE CONTROLS
-                  _actionGroup("Playback", [
-                    _btn("Mode Édition", () => provider.setMode(AppMode.edit), Colors.purple),
-                    const VerticalDivider(width: 20),
-                    _btn("Recommencer", () => provider.restartMusic(MediaQuery.of(context).size.height), Colors.orange),
-                    const SizedBox(width: 10),
-                    if (provider.isPlaying && !provider.isPaused)
-                      _btn("Pause", () => provider.pauseMusic(), Colors.redAccent)
-                    else
-                      _btn("Reprendre", () => provider.resumeMusic(MediaQuery.of(context).size.height), Colors.green),
-                    const SizedBox(width: 10),
-                    _btn("◀◀ -5s", () {
-                      double screenHeight = MediaQuery.of(context).size.height;
-                      double pixelRatio = screenHeight / 8.0;
-                      double pixelsPerSecond = pixelRatio * (provider.bpm / 60.0);
-                      provider.seek(-5 * pixelsPerSecond, screenHeight);
-                    }, Colors.blue),
-                    _btn("▶▶ +5s", () {
-                      double screenHeight = MediaQuery.of(context).size.height;
-                      double pixelRatio = screenHeight / 8.0;
-                      double pixelsPerSecond = pixelRatio * (provider.bpm / 60.0);
-                      provider.seek(5 * pixelsPerSecond, screenHeight);
-                    }, Colors.blue),
-                  ]),
-                ],
 
-                const VerticalDivider(width: 20),
+                  const VerticalDivider(width: 10),
 
-                // 4. MIDI & General
-                _actionGroup("Midi", [
-                  if (isEditMode)
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text("Auto Silence", style: TextStyle(fontSize: 10)),
-                        Checkbox(
-                          value: provider.autoSilence,
-                          onChanged: (v) => provider.setAutoSilence(v ?? false),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ],
+                  // 5. NAVIGATION (Compactée)
+                  _actionGroup("", [
+                    IconButton(
+                      icon: const Icon(Icons.fast_rewind, color: Colors.blue),
+                      onPressed: () {
+                        double screenHeight = MediaQuery.of(context).size.height;
+                        provider.seek(-(screenHeight / 8.0), screenHeight);
+                      },
                     ),
-                  _btn("Panic (Esc)", () => provider.panic(), Colors.red[900]!),
-                ]),
-
-                if (isEditMode) ...[
-                  const VerticalDivider(width: 20),
-
-                  // 5. Apparence
-                  _actionGroup("Apparence", [
-                    _btn("Style (T)", () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomizationPage()));
-                    }, Colors.purple),
+                    IconButton(
+                      icon: const Icon(Icons.fast_forward, color: Colors.blue),
+                      onPressed: () {
+                        double screenHeight = MediaQuery.of(context).size.height;
+                        provider.seek(screenHeight / 8.0, screenHeight);
+                      },
+                    ),
                   ]),
+                ] else ...[
+                  // PLAY MODE CONTROLS (Déjà assez compact, on garde l'essentiel)
+                  _actionGroup("Playback", [
+                    _btn("Édition", () => provider.setMode(AppMode.edit), Colors.purple),
+                    const VerticalDivider(width: 10),
+                    IconButton(icon: const Icon(Icons.replay, color: Colors.orange), onPressed: () => provider.restartMusic(MediaQuery.of(context).size.height)),
+                    if (provider.isPlaying && !provider.isPaused)
+                      IconButton(icon: const Icon(Icons.pause, color: Colors.redAccent), onPressed: () => provider.pauseMusic())
+                    else
+                      IconButton(icon: const Icon(Icons.play_arrow, color: Colors.green), onPressed: () => provider.resumeMusic(MediaQuery.of(context).size.height)),
+                    IconButton(
+                      icon: const Icon(Icons.history, color: Colors.blue),
+                      onPressed: () {
+                        double screenHeight = MediaQuery.of(context).size.height;
+                        double pixelsPerSecond = (screenHeight / 8.0) * (provider.bpm / 60.0);
+                        provider.seek(-5 * pixelsPerSecond, screenHeight);
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.update, color: Colors.blue),
+                      onPressed: () {
+                        double screenHeight = MediaQuery.of(context).size.height;
+                        double pixelsPerSecond = (screenHeight / 8.0) * (provider.bpm / 60.0);
+                        provider.seek(5 * pixelsPerSecond, screenHeight);
+                      },
+                    ),
+                  ]),
+                  const VerticalDivider(width: 10),
+                  // Pistes à jouer (Reste visible pour le mixage)
+                  _actionGroup("Pistes", 
+                    provider.availableTracks.map((tId) => Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text("T$tId", style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                          SizedBox(
+                            height: 24, width: 24,
+                            child: Checkbox(
+                              value: provider.activeTracks.contains(tId),
+                              onChanged: (_) => provider.toggleTrack(tId),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )).toList()
+                  ),
                 ],
+
+                const VerticalDivider(width: 10),
+
+                // 6. SYSTÈME & STYLE (Regroupés)
+                PopupMenuButton<String>(
+                  tooltip: "Paramètres & Style",
+                  icon: const Icon(Icons.settings, color: Colors.grey),
+                  onSelected: (val) {
+                    if (val == 'style') Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomizationPage()));
+                    if (val == 'panic') provider.panic();
+                    if (val == 'auto') provider.setAutoSilence(!provider.autoSilence);
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'style',
+                      child: Row(children: const [Icon(Icons.palette, size: 18), SizedBox(width: 8), Text("Apparence (T)")]),
+                    ),
+                    if (isEditMode)
+                      PopupMenuItem(
+                        value: 'auto',
+                        child: Row(
+                          children: [
+                            const Text("Auto Silence"),
+                            const Spacer(),
+                            Checkbox(value: provider.autoSilence, onChanged: (v) => provider.setAutoSilence(v ?? false)),
+                          ],
+                        ),
+                      ),
+                    const PopupMenuDivider(),
+                    PopupMenuItem(
+                      value: 'panic',
+                      child: Row(children: const [Icon(Icons.warning, color: Colors.red, size: 18), SizedBox(width: 8), Text("PANIC (Esc)", style: TextStyle(color: Colors.red))]),
+                    ),
+                  ],
+                ),
+
+                // Petit rappel du fichier / soundfont
+                if (isEditMode)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (provider.currentFileName.isNotEmpty)
+                            Text(provider.currentFileName, style: const TextStyle(fontSize: 9, fontStyle: FontStyle.italic)),
+                          Text(provider.currentSoundFontName, style: const TextStyle(fontSize: 8, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

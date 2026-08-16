@@ -139,6 +139,7 @@ class SessionProvider with ChangeNotifier {
     _isSustainDown = false;
     _sustainedNotes.clear();
     _activeRecordingNotes.clear();
+    _lastNoteIdStarted.clear();
     
     notifyListeners();
   }
@@ -195,6 +196,13 @@ class SessionProvider with ChangeNotifier {
   final Set<int> _activeKeys = {};
   bool _injectionDone = false; // [NEW] Flag to track sequencer completion
 
+  // Multi-Pistes [NEW]
+  int _currentTrackId = 0;
+  final Set<int> _activeTracks = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}; // Tracks actives pour la lecture
+  
+  // Anti-Coupure [NEW] : Stocke l'ID de la dernière note ayant déclenché un son pour chaque touche
+  final Map<int, String> _lastNoteIdStarted = {};
+
   // Option "Silence Automatique"
   // false = Le défilement s'arrête si aucune note n'est pressée (Mode "Pas à pas")
   // true  = Le défilement continue et crée du vide (Mode "Enregistrement continu")
@@ -239,6 +247,43 @@ class SessionProvider with ChangeNotifier {
   double get fallingY => _fallingY;
   List<NoteModel> get activeFallingNotes => _activeFallingNotes;
   bool get autoSilence => _autoSilence;
+  int get currentTrackId => _currentTrackId;
+  Set<int> get activeTracks => _activeTracks;
+
+  // --- LOGIQUE MULTI-PISTES ---
+
+  void setCurrentTrackId(int id) {
+    _currentTrackId = id;
+    notifyListeners();
+  }
+
+  void toggleTrack(int trackId) {
+    if (_activeTracks.contains(trackId)) {
+      _activeTracks.remove(trackId);
+    } else {
+      _activeTracks.add(trackId);
+    }
+    notifyListeners();
+  }
+
+  /// Retourne la liste des IDs de pistes présents dans la session
+  List<int> get availableTracks {
+    final tracks = _session.map((n) => n.trackId).toSet().toList();
+    tracks.sort();
+    return tracks;
+  }
+
+  Map<int, double> _getTrackMaxOffsets() {
+    Map<int, double> map = {};
+    for (var n in _session) {
+      if (!_activeTracks.contains(n.trackId)) continue;
+      map[n.trackId] = (map[n.trackId] ?? 0.0);
+      if (n.currentOffset + n.height > map[n.trackId]!) {
+        map[n.trackId] = n.currentOffset + n.height;
+      }
+    }
+    return map;
+  }
 
 
   // --- LOGIQUE MIDI TEMPS RÉEL (RECORDING) ---
@@ -293,23 +338,25 @@ class SessionProvider with ChangeNotifier {
     if (_playbackPosition < 0) _playbackPosition = 0;
     
     // Calculate max song position
-    double maxOffset = 0;
-    for (var n in _session) {
-      if (n.currentOffset + n.height > maxOffset) maxOffset = n.currentOffset + n.height;
+    final trackMaxOffsets = _getTrackMaxOffsets();
+    double globalMaxOffset = 0;
+    if (trackMaxOffsets.isNotEmpty) {
+      globalMaxOffset = trackMaxOffsets.values.fold(0, (a, b) => a > b ? a : b);
     }
+
     double pixelRatio = screenHeight / 8.0;
-    double maxPos = maxOffset * pixelRatio;
+    double maxPos = globalMaxOffset * pixelRatio;
     if (_playbackPosition > maxPos) _playbackPosition = maxPos;
 
     // Recalculate which notes should be visible at this new position
-    _recalculateActiveFallingNotes(screenHeight, maxOffset);
+    _recalculateActiveFallingNotes(screenHeight, trackMaxOffsets);
 
     // If we are playing and not paused, the timer will pick up from here.
     // Otherwise, we just notify listeners to update the static view.
     notifyListeners();
   }
 
-  void _recalculateActiveFallingNotes(double screenHeight, double maxOffset) {
+  void _recalculateActiveFallingNotes(double screenHeight, Map<int, double> trackMaxOffsets) {
     double cascadeHeight = screenHeight * (5.0 / 9.0);
     double pixelRatio = screenHeight / 8.0;
 
@@ -317,8 +364,11 @@ class SessionProvider with ChangeNotifier {
     _fallingNotes.clear();
 
     for (var note in _session) {
-      double noteStartInSong = (maxOffset - (note.currentOffset + note.height)) * pixelRatio;
-      double playingEndInSong = (maxOffset - (note.currentOffset + note.height - note.playingHeight)) * pixelRatio;
+      if (!_activeTracks.contains(note.trackId)) continue; // [NEW] Filtrage multi-pistes
+      
+      double trackMax = trackMaxOffsets[note.trackId] ?? 0.0;
+      double noteStartInSong = (trackMax - (note.currentOffset + note.height)) * pixelRatio;
+      double playingEndInSong = (trackMax - (note.currentOffset + note.height - note.playingHeight)) * pixelRatio;
 
       // If the note is currently active (visually or sonically) at _playbackPosition
       if (noteStartInSong <= _playbackPosition && playingEndInSong > _playbackPosition) {
@@ -333,6 +383,7 @@ class SessionProvider with ChangeNotifier {
           isSilence: note.isSilence,
           currentOffset: cascadeHeight - (_playbackPosition - noteStartInSong),
           fromMidi: note.fromMidi,
+          trackId: note.trackId,
           velocity: note.velocity,
         );
         _activeFallingNotes.add(fNote);
@@ -385,6 +436,7 @@ class SessionProvider with ChangeNotifier {
       chordId: _currentMidiChordId, // Utilise l'ID intelligent (Fix 1)
       currentOffset: 0.0, // Elle apparaît tout en bas (le présent)
       fromMidi: true, // [NEW] Marqueur
+      trackId: _currentTrackId, // [NEW] Multi-Piste
       velocity: velocity,
     );
 
@@ -436,8 +488,10 @@ class SessionProvider with ChangeNotifier {
     // Boucle à ~60 FPS (16ms)
     _recordingTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
       // 1. Condition d'arrêt (Pause)
-      // Si aucune note n'est maintenue ET que l'option AutoSilence est décochée
-      if (_activeRecordingNotes.isEmpty && _sustainedNotes.isEmpty && !_autoSilence) {
+      // [FIX] On ne génère du silence que si la piste a déjà commencé (au moins une note)
+      bool currentTrackStarted = _session.any((n) => n.trackId == _currentTrackId);
+      
+      if (_activeRecordingNotes.isEmpty && _sustainedNotes.isEmpty && (!_autoSilence || !currentTrackStarted)) {
         return;
       }
 
@@ -448,6 +502,9 @@ class SessionProvider with ChangeNotifier {
       // On parcourt toute la session pour mettre à jour les positions/tailles
       for (int i = 0; i < _session.length; i++) {
         NoteModel note = _session[i];
+
+        // [NEW] Ne faire défiler que la piste actuelle pour que chaque piste "démarre de 0"
+        if (note.trackId != _currentTrackId) continue;
 
         // Cas 1 : La note est encore enfoncée (Active)
         // Elle doit rester en bas (offset 0) mais grandir (visuel + son)
@@ -516,13 +573,16 @@ class SessionProvider with ChangeNotifier {
       color: isBlackKey ? Colors.blue : Colors.lightGreen,
       chordId: cId,
       fromMidi: false,
+      trackId: _currentTrackId, // [NEW] Multi-Piste
       currentOffset: 0.0,
     );
 
     // En mode manuel sans accord, on pousse les autres vers le haut
     if (!_isChordMode) {
       for (var note in _session) {
-        note.currentOffset += h;
+        if (note.trackId == _currentTrackId) { // [NEW] Solo track shift
+          note.currentOffset += h;
+        }
       }
     }
 
@@ -533,18 +593,37 @@ class SessionProvider with ChangeNotifier {
   void addSilence(int length) {
     for(int i=0; i<length; i++) {
       String cId = "${DateTime.now().toIso8601String()}_$i";
-      for (var note in _session) { note.currentOffset += 1.0; }
-      _session.add(NoteModel(keyIndex: -1, height: 1.0, color: Colors.transparent, chordId: cId, isSilence: true));
+      for (var note in _session) { 
+        if (note.trackId == _currentTrackId) { // [NEW]
+          note.currentOffset += 1.0; 
+        }
+      }
+      _session.add(NoteModel(
+        keyIndex: -1, 
+        height: 1.0, 
+        color: Colors.transparent, 
+        chordId: cId, 
+        isSilence: true,
+        trackId: _currentTrackId, // [NEW]
+      ));
     }
     notifyListeners();
   }
 
   void removeSilence(int length) {
-    if (_session.isEmpty || !_session.last.isSilence) return;
+    // [NEW] Find last silence for CURRENT track
+    final lastNote = _session.lastWhere((n) => n.trackId == _currentTrackId, orElse: () => NoteModel(keyIndex: -2, height: 0, color: Colors.transparent, chordId: ""));
+    if (lastNote.keyIndex == -2 || !lastNote.isSilence) return;
+
     for(int i=0; i<length; i++) {
-      if (_session.isNotEmpty && _session.last.isSilence) {
-        _session.removeLast();
-        for (var note in _session) { note.currentOffset -= 1.0; }
+      final idx = _session.lastIndexWhere((n) => n.trackId == _currentTrackId && n.isSilence);
+      if (idx != -1) {
+        _session.removeAt(idx);
+        for (var note in _session) { 
+          if (note.trackId == _currentTrackId) {
+            note.currentOffset -= 1.0; 
+          }
+        }
       }
     }
     notifyListeners();
@@ -618,16 +697,15 @@ class SessionProvider with ChangeNotifier {
     // Dans Synthesia, les notes avec de grands offsets sont au DEBUT du morceau (plus haut)
     // Les notes avec offset 0 sont à la FIN (présent lors de l'enregistrement)
     
-    // Trouver l'offset maximum (le début réel du morceau)
-    double maxOffset = 0;
-    for (var n in _session) {
-      if (n.currentOffset + n.height > maxOffset) {
-        maxOffset = n.currentOffset + n.height;
-      }
+    // [NEW] Calcul des offsets par piste pour synchronisation au début
+    final trackMaxOffsets = _getTrackMaxOffsets();
+    double globalMaxOffset = 0;
+    if (trackMaxOffsets.isNotEmpty) {
+      globalMaxOffset = trackMaxOffsets.values.fold(0, (a, b) => a > b ? a : b);
     }
 
     // On pré-remplit les notes actives qui sont déjà dans la zone de chute
-    _recalculateActiveFallingNotes(screenHeight, maxOffset);
+    _recalculateActiveFallingNotes(screenHeight, trackMaxOffsets);
 
     _animTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
       if (!_isPlaying || _isPaused) {
@@ -640,15 +718,18 @@ class SessionProvider with ChangeNotifier {
       _playbackPosition += movement;
 
       // Update _animationScrollY as a normalized progress (0.0 to 1.0)
-      if (maxOffset > 0) {
+      if (globalMaxOffset > 0) {
         double pixelRatio = screenHeight / 8.0;
-        _animationScrollY = (_playbackPosition / (maxOffset * pixelRatio)).clamp(0.0, 1.0);
+        _animationScrollY = (_playbackPosition / (globalMaxOffset * pixelRatio)).clamp(0.0, 1.0);
       }
 
       // 1. Déclencher les nouvelles notes de la session
       bool anyNoteLeftToInject = false;
       for (var note in _session) {
-        double noteStartInSong = (maxOffset - (note.currentOffset + note.height)) * pixelRatio;
+        if (!_activeTracks.contains(note.trackId)) continue; // [NEW] Filtrage multi-pistes
+
+        double trackMax = trackMaxOffsets[note.trackId] ?? 0.0;
+        double noteStartInSong = (trackMax - (note.currentOffset + note.height)) * pixelRatio;
         
         if (noteStartInSong > _playbackPosition) {
           anyNoteLeftToInject = true;
@@ -668,6 +749,7 @@ class SessionProvider with ChangeNotifier {
               isSilence: note.isSilence,
               currentOffset: cascadeHeight, // Elle commence en haut
               fromMidi: note.fromMidi,
+              trackId: note.trackId, // [NEW] Multi-Piste
               velocity: note.velocity,
             );
             _activeFallingNotes.add(fallingNote);
@@ -686,6 +768,7 @@ class SessionProvider with ChangeNotifier {
         // Déclenchement du son à l'impact (offset 0 + _fallingY)
         if (oldOffset >= _fallingY && note.currentOffset < _fallingY && !note.isSilence) {
           _playNote(note.keyIndex + 21, velocity: note.velocity);
+          _lastNoteIdStarted[note.keyIndex] = note.id; // [NEW] Marquer comme dernier son déclenché
         }
       }
 
@@ -693,7 +776,11 @@ class SessionProvider with ChangeNotifier {
       _activeFallingNotes.removeWhere((n) {
         bool soundFinished = n.currentOffset + (n.playingHeight * pixelRatio) < _fallingY;
         if (soundFinished && !n.isSilence) {
-          _stopNote(n.keyIndex + 21);
+          // [NEW] On ne coupe le son que si c'est bien CETTE instance qui a démarré le son en dernier
+          // Cela évite de couper une note identique qui vient de redémarrer (overlapping)
+          if (_lastNoteIdStarted[n.keyIndex] == n.id) {
+            _stopNote(n.keyIndex + 21);
+          }
           _fallingNotes.remove(n);
         }
         return soundFinished;
@@ -721,6 +808,7 @@ class SessionProvider with ChangeNotifier {
     }
     _activeFallingNotes.clear();
     _fallingNotes.clear();
+    _lastNoteIdStarted.clear();
     _animTimer?.cancel();
     notifyListeners();
   }
@@ -858,6 +946,7 @@ class SessionProvider with ChangeNotifier {
         isSilence: note.isSilence,
         currentOffset: note.currentOffset,
         fromMidi: note.fromMidi,
+        trackId: note.trackId, // [NEW]
         velocity: note.velocity
     );
 
@@ -865,7 +954,8 @@ class SessionProvider with ChangeNotifier {
     // On se base sur currentOffset car c'est lui qui définit la position verticale.
     if (!_isPlaying) {
       for (var otherNote in _session) {
-        if (otherNote.id != note.id && otherNote.currentOffset > note.currentOffset) {
+        if (otherNote.trackId == _currentTrackId && // [NEW]
+            otherNote.id != note.id && otherNote.currentOffset > note.currentOffset) {
           otherNote.currentOffset += diff;
         }
       }
@@ -892,7 +982,8 @@ class SessionProvider with ChangeNotifier {
       // Si ce n'était pas un accord, on redescend les notes du dessus pour combler le vide
       if (!wasChord) {
         for (var noteToBelittle in _session) {
-          if (noteToBelittle.currentOffset > note.currentOffset) {
+          if (noteToBelittle.trackId == _currentTrackId && // [NEW]
+              noteToBelittle.currentOffset > note.currentOffset) {
             noteToBelittle.currentOffset -= h;
           }
         }
@@ -935,6 +1026,8 @@ class SessionProvider with ChangeNotifier {
       for (int t = 0; t < parsedMidi.tracks.length; t++) {
         var track = parsedMidi.tracks[t];
         int absoluteTime = 0;
+        int trackId = t; // [NEW] Utiliser l'index de la piste MIDI comme trackId
+        _activeTracks.add(trackId); // [NEW] Activer la piste par défaut lors de l'import
         
         // On suit l'état des notes en cours
         // Key: MIDI note number
@@ -958,7 +1051,7 @@ class SessionProvider with ChangeNotifier {
             if (!isSustainPedalDown) {
               // Fin du sustain : on finalise toutes les notes qui attendaient
               for (var noteData in notesWaitingForSustain) {
-                _finalizeMidiNote(noteData, absoluteTime, ppq, currentBpm, rawNotes);
+                _finalizeMidiNote(noteData, absoluteTime, ppq, currentBpm, rawNotes, trackId);
               }
               notesWaitingForSustain.clear();
             }
@@ -994,7 +1087,7 @@ class SessionProvider with ChangeNotifier {
                 if (isSustainPedalDown) {
                   notesWaitingForSustain.add(noteData);
                 } else {
-                  _finalizeMidiNote(noteData, absoluteTime, ppq, currentBpm, rawNotes);
+                  _finalizeMidiNote(noteData, absoluteTime, ppq, currentBpm, rawNotes, trackId);
                 }
                 activeNotes.remove(currentNote);
               }
@@ -1004,10 +1097,10 @@ class SessionProvider with ChangeNotifier {
         
         // Finaliser les notes restées ouvertes à la fin de la piste
         for (var noteData in notesWaitingForSustain) {
-          _finalizeMidiNote(noteData, absoluteTime, ppq, currentBpm, rawNotes);
+          _finalizeMidiNote(noteData, absoluteTime, ppq, currentBpm, rawNotes, trackId);
         }
         for (var noteData in activeNotes.values) {
-          _finalizeMidiNote(noteData, absoluteTime, ppq, currentBpm, rawNotes);
+          _finalizeMidiNote(noteData, absoluteTime, ppq, currentBpm, rawNotes, trackId);
         }
       }
 
@@ -1023,7 +1116,7 @@ class SessionProvider with ChangeNotifier {
     }
   }
 
-  void _finalizeMidiNote(Map<String, dynamic> noteData, int endTime, int ppq, int bpm, List<NoteModel> targetList) {
+  void _finalizeMidiNote(Map<String, dynamic> noteData, int endTime, int ppq, int bpm, List<NoteModel> targetList, int trackId) {
     int startTime = noteData['startTime'];
     int visualEndTime = noteData['visualEndTime'] ?? endTime;
     int noteNumber = noteData['noteNumber'];
@@ -1049,6 +1142,7 @@ class SessionProvider with ChangeNotifier {
         color: isBlack ? Colors.blue : Colors.lightGreen,
         chordId: chordId,
         fromMidi: true,
+        trackId: trackId, // [NEW]
         velocity: velocity,
         currentOffset: 0.0,
       ));
