@@ -843,6 +843,10 @@ class SessionProvider with ChangeNotifier {
   void updateNote(NoteModel note, double newH, Color? newC) {
     int idx = _session.indexOf(note);
     if(idx == -1) return;
+
+    double diff = newH - note.height;
+
+    // Mise à jour de la note elle-même
     _session[idx] = NoteModel(
         id: note.id,
         keyIndex: note.keyIndex, 
@@ -856,6 +860,17 @@ class SessionProvider with ChangeNotifier {
         fromMidi: note.fromMidi,
         velocity: note.velocity
     );
+
+    // Décaler les notes "précédentes" (celles qui ont été ajoutées avant et sont donc plus haut)
+    // On se base sur currentOffset car c'est lui qui définit la position verticale.
+    if (!_isPlaying) {
+      for (var otherNote in _session) {
+        if (otherNote.id != note.id && otherNote.currentOffset > note.currentOffset) {
+          otherNote.currentOffset += diff;
+        }
+      }
+    }
+
     notifyListeners();
   }
 
