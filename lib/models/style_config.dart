@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum DifferentiationMode { none, blackWhite, split }
+enum DifferentiationMode { none, blackWhite, split, byTrack, gradient }
 
 class StyleConfig {
   final String name;
@@ -8,8 +8,9 @@ class StyleConfig {
   final int splitKey;
   final Color colorA; // Primary / White / Left
   final Color colorB; // Secondary / Black / Right
+  final Map<int, Color> trackColors; // [NEW] Mode par piste
+  final bool darkenBlackKeysByTrack; // [NEW] Assombrir les touches noires en mode piste
   
-  final bool useGradient;
   final List<Color> gradientColors;
   final double gradientAngle; // In degrees
 
@@ -19,7 +20,8 @@ class StyleConfig {
     this.splitKey = 39, // Middle C (approx)
     this.colorA = Colors.lightGreen,
     this.colorB = Colors.blue,
-    this.useGradient = false,
+    this.trackColors = const {},
+    this.darkenBlackKeysByTrack = false,
     this.gradientColors = const [Colors.purple, Colors.blue],
     this.gradientAngle = 0.0,
   });
@@ -30,7 +32,8 @@ class StyleConfig {
     'splitKey': splitKey,
     'colorA': colorA.toARGB32(),
     'colorB': colorB.toARGB32(),
-    'useGradient': useGradient,
+    'trackColors': trackColors.map((k, v) => MapEntry(k.toString(), v.toARGB32())),
+    'darkenBlackKeysByTrack': darkenBlackKeysByTrack,
     'gradientColors': gradientColors.map((c) => c.toARGB32()).toList(),
     'gradientAngle': gradientAngle,
   };
@@ -42,7 +45,8 @@ class StyleConfig {
       splitKey: json['splitKey'],
       colorA: Color(json['colorA']),
       colorB: Color(json['colorB']),
-      useGradient: json['useGradient'] ?? false,
+      trackColors: (json['trackColors'] as Map?)?.map((k, v) => MapEntry(int.parse(k), Color(v))) ?? {},
+      darkenBlackKeysByTrack: json['darkenBlackKeysByTrack'] ?? false,
       gradientColors: (json['gradientColors'] as List?)
           ?.map((c) => Color(c as int))
           .toList() ?? const [Colors.purple, Colors.blue],
@@ -56,7 +60,8 @@ class StyleConfig {
     int? splitKey,
     Color? colorA,
     Color? colorB,
-    bool? useGradient,
+    Map<int, Color>? trackColors,
+    bool? darkenBlackKeysByTrack,
     List<Color>? gradientColors,
     double? gradientAngle,
   }) {
@@ -66,7 +71,8 @@ class StyleConfig {
       splitKey: splitKey ?? this.splitKey,
       colorA: colorA ?? this.colorA,
       colorB: colorB ?? this.colorB,
-      useGradient: useGradient ?? this.useGradient,
+      trackColors: trackColors ?? this.trackColors,
+      darkenBlackKeysByTrack: darkenBlackKeysByTrack ?? this.darkenBlackKeysByTrack,
       gradientColors: gradientColors ?? this.gradientColors,
       gradientAngle: gradientAngle ?? this.gradientAngle,
     );

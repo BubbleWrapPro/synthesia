@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/style_provider.dart';
+import '../models/style_config.dart';
 
 class PianoKeyboard extends StatelessWidget {
   const PianoKeyboard({super.key});
@@ -83,7 +84,7 @@ class PianoKeyboard extends StatelessWidget {
         Widget activeLayer = Stack(children: [...whiteOverlays, ...blackOverlays]);
 
         // Apply Global Gradient to active layer if enabled
-        if (config.useGradient && (whiteOverlays.isNotEmpty || blackOverlays.isNotEmpty)) {
+        if (config.mode == DifferentiationMode.gradient && (whiteOverlays.isNotEmpty || blackOverlays.isNotEmpty)) {
           double angleRad = (config.gradientAngle - 90) * 3.14159 / 180;
           activeLayer = ShaderMask(
             shaderCallback: (bounds) {
@@ -115,7 +116,7 @@ class PianoKeyboard extends StatelessWidget {
   Color? _getActiveColor(int index, SessionProvider provider, StyleProvider style, double screenHeight) {
     // Priority 1: MIDI / Manual active keys
     if (provider.activeKeys.contains(index)) {
-      return style.getColorForNote(index);
+      return style.getColorForNote(index, trackId: provider.currentTrackId);
     }
 
     // Priority 2: Playback active notes
@@ -126,7 +127,7 @@ class PianoKeyboard extends StatelessWidget {
           double noteTop = note.currentOffset + (note.height * pixelRatio);
           // Check if hitting keyboard (bottom line is 0)
           if (note.currentOffset <= 0 && noteTop >= 0) {
-            return note.overrideColor ?? style.getColorForNote(index);
+            return note.overrideColor ?? style.getColorForNote(index, trackId: note.trackId);
           }
         }
       }
@@ -155,7 +156,7 @@ class PianoKeyboard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color,
         // Replicate tile decoration logic from CascadeView
-        gradient: config.useGradient ? null : LinearGradient(
+        gradient: (config.mode == DifferentiationMode.gradient) ? null : LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [

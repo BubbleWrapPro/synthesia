@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/style_provider.dart';
 import '../models/note_model.dart';
+import '../models/style_config.dart';
 
 class CascadeView extends StatelessWidget {
   const CascadeView({super.key});
@@ -73,7 +74,7 @@ class CascadeView extends StatelessWidget {
             if (bottomPos > constraints.maxHeight || bottomPos + height < 0) continue;
 
             bool hasOverride = note.overrideColor != null;
-            Color noteColor = note.overrideColor ?? style.getColorForNote(note.keyIndex);
+            Color noteColor = note.overrideColor ?? style.getColorForNote(note.keyIndex, trackId: note.trackId);
 
             final noteTile = Positioned(
               left: left,
@@ -85,7 +86,7 @@ class CascadeView extends StatelessWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     color: noteColor,
-                    gradient: (config.useGradient && !hasOverride) ? null : LinearGradient(
+                    gradient: (config.mode == DifferentiationMode.gradient && !hasOverride) ? null : LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
@@ -103,7 +104,7 @@ class CascadeView extends StatelessWidget {
             );
 
             // Separate notes for masking
-            if (config.useGradient && !hasOverride) {
+            if (config.mode == DifferentiationMode.gradient && !hasOverride) {
               maskedNotes.add(noteTile);
             } else {
               unmaskedNotes.add(noteTile);
@@ -128,7 +129,7 @@ class CascadeView extends StatelessWidget {
 
           Widget maskedLayer = Stack(children: maskedNotes);
 
-          if (config.useGradient && maskedNotes.isNotEmpty) {
+          if (config.mode == DifferentiationMode.gradient && maskedNotes.isNotEmpty) {
             double angleRad = (config.gradientAngle - 90) * 3.14159 / 180;
             maskedLayer = ShaderMask(
               shaderCallback: (bounds) {

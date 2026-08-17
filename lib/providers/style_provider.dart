@@ -21,7 +21,7 @@ class StyleProvider with ChangeNotifier {
 
   // --- Logic ---
 
-  Color getColorForNote(int keyIndex) {
+  Color getColorForNote(int keyIndex, {int? trackId}) {
     bool isBlack = _isBlackKey(keyIndex);
 
     switch (_currentConfig.mode) {
@@ -33,6 +33,18 @@ class StyleProvider with ChangeNotifier {
         return (keyIndex < _currentConfig.splitKey) 
             ? _currentConfig.colorA 
             : _currentConfig.colorB;
+      case DifferentiationMode.byTrack:
+        if (trackId != null) {
+          Color base = _currentConfig.trackColors[trackId] ?? _currentConfig.colorA;
+          if (_currentConfig.darkenBlackKeysByTrack && isBlack) {
+            final hsl = HSLColor.fromColor(base);
+            return hsl.withLightness((hsl.lightness - 0.30).clamp(0.0, 1.0)).toColor();
+          }
+          return base;
+        }
+        return Colors.lightGreen;
+      case DifferentiationMode.gradient:
+        return Colors.white;
     }
   }
 

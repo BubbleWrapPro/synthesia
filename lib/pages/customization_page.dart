@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../providers/style_provider.dart';
+import '../providers/session_provider.dart';
 import '../models/style_config.dart';
 
 class CustomizationPage extends StatelessWidget {
@@ -10,6 +11,7 @@ class CustomizationPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final styleProvider = Provider.of<StyleProvider>(context);
+    final sessionProvider = Provider.of<SessionProvider>(context);
     final config = styleProvider.currentConfig;
 
     return Scaffold(
@@ -60,32 +62,35 @@ class CustomizationPage extends StatelessWidget {
                     },
                   ),
                 ],
-                const SizedBox(height: 24),
-                _sectionTitle("Couleurs de base"),
-                _colorTile(
-                  context,
-                  config.mode == DifferentiationMode.blackWhite ? "Touches Blanches" : "Primaire (Gauche)",
-                  config.colorA,
-                  (c) => styleProvider.currentConfig = config.copyWith(colorA: c),
-                ),
-                if (config.mode != DifferentiationMode.none)
-                  _colorTile(
-                    context,
-                    config.mode == DifferentiationMode.blackWhite ? "Touches Noires" : "Secondaire (Droite)",
-                    config.colorB,
-                    (c) => styleProvider.currentConfig = config.copyWith(colorB: c),
+                if (config.mode == DifferentiationMode.byTrack) ...[
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    title: const Text("Assombrir les touches noires"),
+                    subtitle: const Text("Applique une teinte plus sombre aux notes noires de chaque piste"),
+                    value: config.darkenBlackKeysByTrack,
+                    onChanged: (v) {
+                      styleProvider.currentConfig = config.copyWith(darkenBlackKeysByTrack: v);
+                    },
+                    contentPadding: EdgeInsets.zero,
                   ),
-                const SizedBox(height: 24),
-                _sectionTitle("Texture (Gradient)"),
-                SwitchListTile(
-                  title: const Text("Activer le gradient global"),
-                  subtitle: const Text("Applique un effet transparent sur un fond dégradé"),
-                  value: config.useGradient,
-                  onChanged: (v) {
-                    styleProvider.currentConfig = config.copyWith(useGradient: v);
-                  },
-                ),
-                if (config.useGradient) ...[
+                  const SizedBox(height: 16),
+                  _sectionTitle("Couleurs par Piste"),
+                  ...sessionProvider.availableTracks.map((tId) {
+                    return _colorTile(
+                      context,
+                      "Piste $tId",
+                      config.trackColors[tId] ?? config.colorA,
+                      (c) {
+                        final newMap = Map<int, Color>.from(config.trackColors);
+                        newMap[tId] = c;
+                        styleProvider.currentConfig = config.copyWith(trackColors: newMap);
+                      },
+                    );
+                  }),
+                ],
+                if (config.mode == DifferentiationMode.gradient) ...[
+                  const SizedBox(height: 24),
+                  _sectionTitle("Texture (Gradient)"),
                   Text("Angle: ${config.gradientAngle.toInt()}°"),
                   Slider(
                     value: config.gradientAngle,
@@ -132,6 +137,23 @@ class CustomizationPage extends StatelessWidget {
                         ),
                     ],
                   ),
+                ],
+                if (config.mode != DifferentiationMode.byTrack && config.mode != DifferentiationMode.gradient) ...[
+                  const SizedBox(height: 24),
+                  _sectionTitle("Couleurs de base"),
+                  _colorTile(
+                    context,
+                    config.mode == DifferentiationMode.blackWhite ? "Touches Blanches" : "Primaire (Gauche)",
+                    config.colorA,
+                    (c) => styleProvider.currentConfig = config.copyWith(colorA: c),
+                  ),
+                  if (config.mode != DifferentiationMode.none)
+                    _colorTile(
+                      context,
+                      config.mode == DifferentiationMode.blackWhite ? "Touches Noires" : "Secondaire (Droite)",
+                      config.colorB,
+                      (c) => styleProvider.currentConfig = config.copyWith(colorB: c),
+                    ),
                 ],
               ],
             ),
@@ -182,14 +204,13 @@ class CustomizationPage extends StatelessWidget {
   }
 
   String _modeLabel(DifferentiationMode mode) {
-    switch (mode) {
-      case DifferentiationMode.none:
-        return "Aucune";
-      case DifferentiationMode.blackWhite:
-        return "Touches Noires / Blanches";
-      case DifferentiationMode.split:
-        return "Séparation Gauche / Droite";
-    }
+    return switch (mode) {
+      DifferentiationMode.none => "Aucune",
+      DifferentiationMode.blackWhite => "Touches Noires / Blanches",
+      DifferentiationMode.split => "Séparation Gauche / Droite",
+      DifferentiationMode.byTrack => "Par Piste",
+      DifferentiationMode.gradient => "Gradient Global"
+    };
   }
 
   Widget _colorTile(BuildContext context, String label, Color color, Function(Color) onColorChanged) {
