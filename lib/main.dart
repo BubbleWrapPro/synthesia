@@ -97,12 +97,12 @@ class HomeScreen extends StatelessWidget {
 
         // S : Ajouter Silence (Ajout rapide de 1 unité pour être fluide)
         const SingleActivator(LogicalKeyboardKey.space): () {
-          provider.addSilence(1);
+          provider.addSilence(1, screenHeight);
         },
 
         // Backspace : Supprimer Silence (Suppression rapide de 1 unité)
         const SingleActivator(LogicalKeyboardKey.backspace): () {
-          provider.removeSilence(1);
+          provider.removeSilence(1, screenHeight);
         },
 
         // --- 4. APPARENCE ---

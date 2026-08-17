@@ -283,7 +283,7 @@ class ControlPanel extends StatelessWidget {
           onPressed: () {
             int? val = int.tryParse(controller.text);
             if (val != null && val >= 1 && val <= 10) {
-              prov.addSilence(val);
+              prov.addSilence(val, MediaQuery.of(context).size.height);
               Navigator.pop(context);
             }
           },
@@ -323,7 +323,7 @@ class ControlPanel extends StatelessWidget {
           onPressed: () {
             int? val = int.tryParse(controller.text);
             if (val != null && val >= 1 && val <= maxLen) {
-              prov.removeSilence(val);
+              prov.removeSilence(val, MediaQuery.of(context).size.height);
               Navigator.pop(context);
             }
           },

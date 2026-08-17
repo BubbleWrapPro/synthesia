@@ -214,6 +214,7 @@ class SessionProvider with ChangeNotifier {
   final List<NoteModel> _fallingNotes = [];
   final double _fallingY = 0.0;
   List<NoteModel> _activeFallingNotes = []; // Pour le playback
+  double _editScrollOffset = 0.0; // [NEW] Scroll en mode édition
 
   // Variables pour l'enregistrement MIDI temps réel (Recording)
   Timer? _recordingTimer;
@@ -246,6 +247,7 @@ class SessionProvider with ChangeNotifier {
   List<NoteModel> get fallingNotes => _fallingNotes;
   double get fallingY => _fallingY;
   List<NoteModel> get activeFallingNotes => _activeFallingNotes;
+  double get editScrollOffset => _editScrollOffset; // [NEW]
   bool get autoSilence => _autoSilence;
   int get currentTrackId => _currentTrackId;
   Set<int> get activeTracks => _activeTracks;
@@ -295,6 +297,7 @@ class SessionProvider with ChangeNotifier {
 
   void setMode(AppMode mode) {
     _currentMode = mode;
+    _editScrollOffset = 0.0; // [NEW] Reset scroll on mode change
     if (mode == AppMode.edit) {
       stopMusic();
     }
@@ -345,8 +348,15 @@ class SessionProvider with ChangeNotifier {
     }
 
     double pixelRatio = screenHeight / 8.0;
-    double maxPos = globalMaxOffset * pixelRatio;
+    double cascadeHeight = screenHeight * (5.0 / 9.0);
+    double maxPos = (globalMaxOffset * pixelRatio) + cascadeHeight; // Total travel
     if (_playbackPosition > maxPos) _playbackPosition = maxPos;
+
+    // Update progress bar (Audible range)
+    double songDurationPixels = globalMaxOffset * pixelRatio;
+    if (songDurationPixels > 0) {
+      _animationScrollY = ((_playbackPosition - cascadeHeight) / songDurationPixels).clamp(0.0, 1.0);
+    }
 
     // Recalculate which notes should be visible at this new position
     _recalculateActiveFallingNotes(screenHeight, trackMaxOffsets);
@@ -354,6 +364,16 @@ class SessionProvider with ChangeNotifier {
     // If we are playing and not paused, the timer will pick up from here.
     // Otherwise, we just notify listeners to update the static view.
     notifyListeners();
+  }
+
+  void handleScroll(double delta, double screenHeight) {
+    if (_currentMode == AppMode.play) {
+      seek(delta, screenHeight);
+    } else {
+      _editScrollOffset += delta;
+      if (_editScrollOffset < 0) _editScrollOffset = 0;
+      notifyListeners();
+    }
   }
 
   void _recalculateActiveFallingNotes(double screenHeight, Map<int, double> trackMaxOffsets) {
@@ -364,7 +384,7 @@ class SessionProvider with ChangeNotifier {
     _fallingNotes.clear();
 
     for (var note in _session) {
-      if (!_activeTracks.contains(note.trackId)) continue; // [NEW] Filtrage multi-pistes
+      if (!_activeTracks.contains(note.trackId)) continue;
       
       double trackMax = trackMaxOffsets[note.trackId] ?? 0.0;
       double noteStartInSong = (trackMax - (note.currentOffset + note.height)) * pixelRatio;
@@ -403,10 +423,11 @@ class SessionProvider with ChangeNotifier {
     int keyIndex = midiNote - 21;
     if (keyIndex < 0 || keyIndex > 87) return;
 
-    // Si la note était en "sustain", on la stoppe proprement avant de la rejouer
-    if (_sustainedNotes.containsKey(keyIndex)) {
+    // [FIX] Si la note était déjà active ou en "sustain", on la stoppe proprement avant de la rejouer
+    if (_activeRecordingNotes.containsKey(keyIndex) || _sustainedNotes.containsKey(keyIndex)) {
       _stopNote(midiNote);
       _sustainedNotes.remove(keyIndex);
+      _activeRecordingNotes.remove(keyIndex);
     }
 
     // 2. Détermination de la couleur
@@ -558,8 +579,11 @@ class SessionProvider with ChangeNotifier {
 
   // --- ACTIONS MANUELLES (INTERFACE) ---
 
-  void addNote(int keyIndex, bool isBlackKey) {
+  void addNote(int keyIndex, bool isBlackKey, double screenHeight) {
     if (_isPlaying) return;
+
+    double pixelRatio = screenHeight / 8.0;
+    double insertionOffset = _editScrollOffset / pixelRatio;
 
     // Ajout manuel "one shot" (ancienne logique, toujours utile pour l'UI)
     double h = _defaultHeight;
@@ -574,13 +598,13 @@ class SessionProvider with ChangeNotifier {
       chordId: cId,
       fromMidi: false,
       trackId: _currentTrackId, // [NEW] Multi-Piste
-      currentOffset: 0.0,
+      currentOffset: insertionOffset,
     );
 
     // En mode manuel sans accord, on pousse les autres vers le haut
     if (!_isChordMode) {
       for (var note in _session) {
-        if (note.trackId == _currentTrackId) { // [NEW] Solo track shift
+        if (note.trackId == _currentTrackId && note.currentOffset >= insertionOffset) { 
           note.currentOffset += h;
         }
       }
@@ -590,11 +614,14 @@ class SessionProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void addSilence(int length) {
+  void addSilence(int length, double screenHeight) {
+    double pixelRatio = screenHeight / 8.0;
+    double insertionOffset = _editScrollOffset / pixelRatio;
+
     for(int i=0; i<length; i++) {
       String cId = "${DateTime.now().toIso8601String()}_$i";
       for (var note in _session) { 
-        if (note.trackId == _currentTrackId) { // [NEW]
+        if (note.trackId == _currentTrackId && note.currentOffset >= insertionOffset) { 
           note.currentOffset += 1.0; 
         }
       }
@@ -605,23 +632,36 @@ class SessionProvider with ChangeNotifier {
         chordId: cId, 
         isSilence: true,
         trackId: _currentTrackId, // [NEW]
+        currentOffset: insertionOffset,
       ));
     }
     notifyListeners();
   }
 
-  void removeSilence(int length) {
-    // [NEW] Find last silence for CURRENT track
-    final lastNote = _session.lastWhere((n) => n.trackId == _currentTrackId, orElse: () => NoteModel(keyIndex: -2, height: 0, color: Colors.transparent, chordId: ""));
-    if (lastNote.keyIndex == -2 || !lastNote.isSilence) return;
+  void removeSilence(int length, double screenHeight) {
+    double pixelRatio = screenHeight / 8.0;
+    double insertionOffset = _editScrollOffset / pixelRatio;
 
+    // On cherche le silence le plus proche de l'insertion (commençant à l'insertion)
     for(int i=0; i<length; i++) {
-      final idx = _session.lastIndexWhere((n) => n.trackId == _currentTrackId && n.isSilence);
+      final idx = _session.lastIndexWhere((n) => n.trackId == _currentTrackId && n.isSilence && (n.currentOffset - insertionOffset).abs() < 0.01);
       if (idx != -1) {
         _session.removeAt(idx);
         for (var note in _session) { 
-          if (note.trackId == _currentTrackId) {
+          if (note.trackId == _currentTrackId && note.currentOffset > insertionOffset) {
             note.currentOffset -= 1.0; 
+          }
+        }
+      } else {
+        // Fallback : remove from end if nothing at insertion point
+        final lastIdx = _session.lastIndexWhere((n) => n.trackId == _currentTrackId && n.isSilence);
+        if (lastIdx != -1) {
+          double off = _session[lastIdx].currentOffset;
+          _session.removeAt(lastIdx);
+          for (var note in _session) {
+            if (note.trackId == _currentTrackId && note.currentOffset > off) {
+              note.currentOffset -= 1.0;
+            }
           }
         }
       }
@@ -633,6 +673,7 @@ class SessionProvider with ChangeNotifier {
     _session.clear();
     _currentFileName = "";
     _animationScrollY = 0;
+    _editScrollOffset = 0.0; // [NEW]
     _updateSystemTitle(); // [NEW] Force OS title update
     stopRecordingLoop(); // Sécurité
     notifyListeners();
@@ -691,37 +732,37 @@ class SessionProvider with ChangeNotifier {
     // 1. Moteur physique (Timer de descente)
     double cascadeHeight = screenHeight * (5.0 / 9.0);
     double pixelRatio = screenHeight / 8.0;
-    double pixelsPerMs = (pixelRatio * (_bpm / 60.0)) / 1000.0;
+      double pixelsPerMs = (pixelRatio * (_bpm / 60.0)) / 1000.0;
 
-    // --- CORRECTION DIRECTION ---
-    // Dans Synthesia, les notes avec de grands offsets sont au DEBUT du morceau (plus haut)
-    // Les notes avec offset 0 sont à la FIN (présent lors de l'enregistrement)
-    
-    // [NEW] Calcul des offsets par piste pour synchronisation au début
-    final trackMaxOffsets = _getTrackMaxOffsets();
-    double globalMaxOffset = 0;
-    if (trackMaxOffsets.isNotEmpty) {
-      globalMaxOffset = trackMaxOffsets.values.fold(0, (a, b) => a > b ? a : b);
-    }
-
-    // On pré-remplit les notes actives qui sont déjà dans la zone de chute
-    _recalculateActiveFallingNotes(screenHeight, trackMaxOffsets);
-
-    _animTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
-      if (!_isPlaying || _isPaused) {
-        timer.cancel();
-        return;
+      // --- CORRECTION DIRECTION ---
+      // Dans Synthesia, les notes avec de grands offsets sont au DEBUT du morceau (plus haut)
+      // Les notes avec offset 0 sont à la FIN (présent lors de l'enregistrement)
+      
+      // [NEW] Calcul des offsets par piste pour synchronisation au début
+      final trackMaxOffsets = _getTrackMaxOffsets();
+      double globalMaxOffset = 0;
+      if (trackMaxOffsets.isNotEmpty) {
+        globalMaxOffset = trackMaxOffsets.values.fold(0, (a, b) => a > b ? a : b);
       }
 
-      double movement = pixelsPerMs * 16.0;
-      double oldPlaybackPos = _playbackPosition;
-      _playbackPosition += movement;
+      // On pré-remplit les notes actives qui sont déjà dans la zone de chute
+      _recalculateActiveFallingNotes(screenHeight, trackMaxOffsets);
 
-      // Update _animationScrollY as a normalized progress (0.0 to 1.0)
-      if (globalMaxOffset > 0) {
-        double pixelRatio = screenHeight / 8.0;
-        _animationScrollY = (_playbackPosition / (globalMaxOffset * pixelRatio)).clamp(0.0, 1.0);
-      }
+      _animTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
+        if (!_isPlaying || _isPaused) {
+          timer.cancel();
+          return;
+        }
+
+        double movement = pixelsPerMs * 16.0;
+        double oldPlaybackPos = _playbackPosition;
+        _playbackPosition += movement;
+
+        // Update _animationScrollY as a normalized progress (Audible range)
+        double songDurationPixels = globalMaxOffset * pixelRatio;
+        if (songDurationPixels > 0) {
+          _animationScrollY = ((_playbackPosition - cascadeHeight) / songDurationPixels).clamp(0.0, 1.0);
+        }
 
       // 1. Déclencher les nouvelles notes de la session
       bool anyNoteLeftToInject = false;
@@ -768,7 +809,7 @@ class SessionProvider with ChangeNotifier {
         // Déclenchement du son à l'impact (offset 0 + _fallingY)
         if (oldOffset >= _fallingY && note.currentOffset < _fallingY && !note.isSilence) {
           _playNote(note.keyIndex + 21, velocity: note.velocity);
-          _lastNoteIdStarted[note.keyIndex] = note.id; // [NEW] Marquer comme dernier son déclenché
+          _lastNoteIdStarted[note.keyIndex] = note.id; 
         }
       }
 
@@ -1074,6 +1115,10 @@ class SessionProvider with ChangeNotifier {
 
           if (currentNote != null) {
             if (isNoteOn) {
+              // [FIX] Si la note est déjà active, on la finalise avant d'en commencer une nouvelle
+              if (activeNotes.containsKey(currentNote)) {
+                _finalizeMidiNote(activeNotes[currentNote]!, absoluteTime, ppq, currentBpm, rawNotes, trackId);
+              }
               activeNotes[currentNote] = {
                 'noteNumber': currentNote,
                 'startTime': absoluteTime,

@@ -145,7 +145,7 @@ class PianoKeyboard extends StatelessWidget {
           )
       ),
       child: InkWell(
-        onTap: () => provider.addNote(index, isBlack),
+        onTap: () => provider.addNote(index, isBlack, MediaQuery.of(context).size.height),
       ),
     );
   }

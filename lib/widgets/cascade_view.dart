@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/style_provider.dart';
@@ -10,20 +11,27 @@ class CascadeView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.black,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final provider = Provider.of<SessionProvider>(context);
-          final style = Provider.of<StyleProvider>(context);
-          final session = provider.session;
-          final config = style.currentConfig;
+    final provider = Provider.of<SessionProvider>(context);
+    final double screenHeight = MediaQuery.of(context).size.height;
 
-          // Geometry constants matching PianoKeyboard
-          final double whiteKeyWidth = constraints.maxWidth / 52;
-          final double blackKeyWidth = whiteKeyWidth * 0.6;
-          final double screenHeight = MediaQuery.of(context).size.height;
-          final double pixelRatio = screenHeight / 8.0;
+    return Listener(
+      onPointerSignal: (pointerSignal) {
+        if (pointerSignal is PointerScrollEvent) {
+          provider.handleScroll(pointerSignal.scrollDelta.dy, screenHeight);
+        }
+      },
+      child: Container(
+        color: Colors.black,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final style = Provider.of<StyleProvider>(context);
+            final session = provider.session;
+            final config = style.currentConfig;
+
+            // Geometry constants matching PianoKeyboard
+            final double whiteKeyWidth = constraints.maxWidth / 52;
+            final double blackKeyWidth = whiteKeyWidth * 0.6;
+            final double pixelRatio = screenHeight / 8.0;
 
           List<Widget> tiles = [];
 
@@ -58,9 +66,11 @@ class CascadeView extends StatelessWidget {
             double left = _calculateLeftPos(note.keyIndex, whiteKeyWidth, blackKeyWidth);
             double height = note.height * pixelRatio;
 
-            double bottomPos = provider.isPlaying ? note.currentOffset : note.currentOffset * pixelRatio;
+            double bottomPos = provider.isPlaying 
+                ? note.currentOffset 
+                : (note.currentOffset * pixelRatio) - provider.editScrollOffset;
 
-            if (bottomPos > constraints.maxHeight) continue;
+            if (bottomPos > constraints.maxHeight || bottomPos + height < 0) continue;
 
             bool hasOverride = note.overrideColor != null;
             Color noteColor = note.overrideColor ?? style.getColorForNote(note.keyIndex);
@@ -142,7 +152,7 @@ class CascadeView extends StatelessWidget {
           return Stack(children: tiles);
         },
       ),
-    );
+    ),);
   }
 
   // Exact logic to match PianoKeyboard
