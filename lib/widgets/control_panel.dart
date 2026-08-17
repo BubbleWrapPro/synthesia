@@ -89,6 +89,20 @@ class ControlPanel extends StatelessWidget {
                       )),
                       onChanged: (v) => provider.setCurrentTrackId(v ?? 0),
                     ),
+                    const SizedBox(width: 8),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text("Toutes", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                        SizedBox(
+                          height: 20, width: 20,
+                          child: Checkbox(
+                            value: provider.showAllTracksInEdit,
+                            onChanged: (v) => provider.setShowAllTracksInEdit(v ?? false),
+                          ),
+                        ),
+                      ],
+                    ),
                   ]),
 
                   const VerticalDivider(width: 10),

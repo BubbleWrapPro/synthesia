@@ -52,7 +52,7 @@ class CascadeView extends StatelessWidget {
           // 2. Draw Notes
           List<NoteModel> notesToDraw = provider.isPlaying 
               ? provider.activeFallingNotes 
-              : session.where((n) => n.trackId == provider.currentTrackId).toList();
+              : session.where((n) => provider.showAllTracksInEdit || n.trackId == provider.currentTrackId).toList();
           
           List<Widget> maskedNotes = [];
           List<Widget> unmaskedNotes = [];

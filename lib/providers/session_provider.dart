@@ -207,6 +207,7 @@ class SessionProvider with ChangeNotifier {
   // false = Le défilement s'arrête si aucune note n'est pressée (Mode "Pas à pas")
   // true  = Le défilement continue et crée du vide (Mode "Enregistrement continu")
   bool _autoSilence = false;
+  bool _showAllTracksInEdit = false; // [NEW] Afficher toutes les pistes en mode édition
 
   // Variables pour l'animation de lecture (Playback)
   double _animationScrollY = 0.0;
@@ -249,6 +250,7 @@ class SessionProvider with ChangeNotifier {
   List<NoteModel> get activeFallingNotes => _activeFallingNotes;
   double get editScrollOffset => _editScrollOffset; // [NEW]
   bool get autoSilence => _autoSilence;
+  bool get showAllTracksInEdit => _showAllTracksInEdit; // [NEW]
   int get currentTrackId => _currentTrackId;
   Set<int> get activeTracks => _activeTracks;
 
@@ -292,6 +294,11 @@ class SessionProvider with ChangeNotifier {
 
   void setAutoSilence(bool value) {
     _autoSilence = value;
+    notifyListeners();
+  }
+
+  void setShowAllTracksInEdit(bool value) {
+    _showAllTracksInEdit = value;
     notifyListeners();
   }
 
@@ -591,20 +598,22 @@ class SessionProvider with ChangeNotifier {
         ? _session.last.chordId
         : DateTime.now().toIso8601String();
 
+    int targetTrackId = _showAllTracksInEdit ? 0 : _currentTrackId;
+
     NoteModel newNote = NoteModel(
       keyIndex: keyIndex,
       height: h,
       color: isBlackKey ? Colors.blue : Colors.lightGreen,
       chordId: cId,
       fromMidi: false,
-      trackId: _currentTrackId, // [NEW] Multi-Piste
+      trackId: targetTrackId, // [NEW] Multi-Piste
       currentOffset: insertionOffset,
     );
 
     // En mode manuel sans accord, on pousse les autres vers le haut
     if (!_isChordMode) {
       for (var note in _session) {
-        if (note.trackId == _currentTrackId && note.currentOffset >= insertionOffset) { 
+        if (note.trackId == targetTrackId && note.currentOffset >= insertionOffset) { 
           note.currentOffset += h;
         }
       }
@@ -617,11 +626,12 @@ class SessionProvider with ChangeNotifier {
   void addSilence(int length, double screenHeight) {
     double pixelRatio = screenHeight / 8.0;
     double insertionOffset = _editScrollOffset / pixelRatio;
+    int targetTrackId = _showAllTracksInEdit ? 0 : _currentTrackId;
 
     for(int i=0; i<length; i++) {
       String cId = "${DateTime.now().toIso8601String()}_$i";
       for (var note in _session) { 
-        if (note.trackId == _currentTrackId && note.currentOffset >= insertionOffset) { 
+        if (note.trackId == targetTrackId && note.currentOffset >= insertionOffset) { 
           note.currentOffset += 1.0; 
         }
       }
@@ -631,7 +641,7 @@ class SessionProvider with ChangeNotifier {
         color: Colors.transparent, 
         chordId: cId, 
         isSilence: true,
-        trackId: _currentTrackId, // [NEW]
+        trackId: targetTrackId, // [NEW]
         currentOffset: insertionOffset,
       ));
     }
@@ -641,25 +651,26 @@ class SessionProvider with ChangeNotifier {
   void removeSilence(int length, double screenHeight) {
     double pixelRatio = screenHeight / 8.0;
     double insertionOffset = _editScrollOffset / pixelRatio;
+    int targetTrackId = _showAllTracksInEdit ? 0 : _currentTrackId;
 
     // On cherche le silence le plus proche de l'insertion (commençant à l'insertion)
     for(int i=0; i<length; i++) {
-      final idx = _session.lastIndexWhere((n) => n.trackId == _currentTrackId && n.isSilence && (n.currentOffset - insertionOffset).abs() < 0.01);
+      final idx = _session.lastIndexWhere((n) => n.trackId == targetTrackId && n.isSilence && (n.currentOffset - insertionOffset).abs() < 0.01);
       if (idx != -1) {
         _session.removeAt(idx);
         for (var note in _session) { 
-          if (note.trackId == _currentTrackId && note.currentOffset > insertionOffset) {
+          if (note.trackId == targetTrackId && note.currentOffset > insertionOffset) {
             note.currentOffset -= 1.0; 
           }
         }
       } else {
         // Fallback : remove from end if nothing at insertion point
-        final lastIdx = _session.lastIndexWhere((n) => n.trackId == _currentTrackId && n.isSilence);
+        final lastIdx = _session.lastIndexWhere((n) => n.trackId == targetTrackId && n.isSilence);
         if (lastIdx != -1) {
           double off = _session[lastIdx].currentOffset;
           _session.removeAt(lastIdx);
           for (var note in _session) {
-            if (note.trackId == _currentTrackId && note.currentOffset > off) {
+            if (note.trackId == targetTrackId && note.currentOffset > off) {
               note.currentOffset -= 1.0;
             }
           }
