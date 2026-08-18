@@ -294,6 +294,9 @@ class SessionProvider with ChangeNotifier {
 
   void setAutoSilence(bool value) {
     _autoSilence = value;
+    if (_autoSilence && _currentMode == AppMode.edit) {
+      startRecordingLoop();
+    }
     notifyListeners();
   }
 
@@ -516,10 +519,10 @@ class SessionProvider with ChangeNotifier {
     // Boucle à ~60 FPS (16ms)
     _recordingTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
       // 1. Condition d'arrêt (Pause)
-      // [FIX] On ne génère du silence que si la piste a déjà commencé (au moins une note)
-      bool currentTrackStarted = _session.any((n) => n.trackId == _currentTrackId);
+      // On ne génère du silence que si la session a déjà commencé (au moins une note)
+      bool sessionStarted = _session.isNotEmpty;
       
-      if (_activeRecordingNotes.isEmpty && _sustainedNotes.isEmpty && (!_autoSilence || !currentTrackStarted)) {
+      if (_activeRecordingNotes.isEmpty && _sustainedNotes.isEmpty && (!_autoSilence || !sessionStarted)) {
         return;
       }
 
@@ -530,9 +533,6 @@ class SessionProvider with ChangeNotifier {
       // On parcourt toute la session pour mettre à jour les positions/tailles
       for (int i = 0; i < _session.length; i++) {
         NoteModel note = _session[i];
-
-        // [NEW] Ne faire défiler que la piste actuelle pour que chaque piste "démarre de 0"
-        if (note.trackId != _currentTrackId) continue;
 
         // Cas 1 : La note est encore enfoncée (Active)
         // Elle doit rester en bas (offset 0) mais grandir (visuel + son)
@@ -620,6 +620,7 @@ class SessionProvider with ChangeNotifier {
     }
 
     _session.add(newNote);
+    if (!_isRecording) startRecordingLoop();
     notifyListeners();
   }
 
@@ -748,7 +749,7 @@ class SessionProvider with ChangeNotifier {
       // --- CORRECTION DIRECTION ---
       // Dans Synthesia, les notes avec de grands offsets sont au DEBUT du morceau (plus haut)
       // Les notes avec offset 0 sont à la FIN (présent lors de l'enregistrement)
-      
+
       // [NEW] Calcul des offsets par piste pour synchronisation au début
       final trackMaxOffsets = _getTrackMaxOffsets();
       double globalMaxOffset = 0;

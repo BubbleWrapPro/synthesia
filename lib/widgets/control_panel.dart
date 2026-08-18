@@ -183,7 +183,7 @@ class ControlPanel extends StatelessWidget {
                   ]),
                   const VerticalDivider(width: 10),
                   // Pistes à jouer (Reste visible pour le mixage)
-                  _actionGroup("Pistes", 
+                  _actionGroup("Pistes",
                     provider.availableTracks.map((tId) => Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Column(

@@ -59,15 +59,15 @@ class CascadeView extends StatelessWidget {
           List<Widget> bottomBars = [];
 
           for (var note in notesToDraw) {
-            if (note.isSilence && !provider.isPlaying) continue; 
-            if (note.isSilence && provider.isPlaying) continue;  
+            if (note.isSilence && !provider.isPlaying) continue;
+            if (note.isSilence && provider.isPlaying) continue;
 
             bool isBlack = _isBlackKey(note.keyIndex);
             double width = isBlack ? blackKeyWidth : whiteKeyWidth;
             double left = _calculateLeftPos(note.keyIndex, whiteKeyWidth, blackKeyWidth);
             double height = note.height * pixelRatio;
 
-            double bottomPos = provider.isPlaying 
+            double bottomPos = provider.isPlaying
                 ? note.currentOffset 
                 : (note.currentOffset * pixelRatio) - provider.editScrollOffset;
 
