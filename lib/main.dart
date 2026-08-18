@@ -66,7 +66,7 @@ class HomeScreen extends StatelessWidget {
     return CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
 
-        // --- 1. LECTURE (Espace) ---
+        // --- 1. LECTURE ---
         const SingleActivator(LogicalKeyboardKey.keyP): () {
           if (provider.isPlaying) {
             provider.stopMusic();
@@ -76,37 +76,40 @@ class HomeScreen extends StatelessWidget {
         },
 
         // --- 2. FICHIER ---
-        // Ctrl + S : Sauvegarder
         const SingleActivator(LogicalKeyboardKey.keyS, control: true): () {
           provider.saveToFile();
         },
-        // Ctrl + O : Importer
         const SingleActivator(LogicalKeyboardKey.keyO, control: true): () {
           provider.importFile();
         },
-        // Ctrl + Delete : Tout Effacer
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true): () {
+          provider.pickAndLoadSoundFont();
+        },
+        const SingleActivator(LogicalKeyboardKey.keyM, control: true): () {
+          provider.initMidi();
+        },
         const SingleActivator(LogicalKeyboardKey.delete, control: true): () {
           provider.clearSession();
         },
 
         // --- 3. ÉDITION ---
-        // A : Mode Accord
         const SingleActivator(LogicalKeyboardKey.keyA): () {
           provider.toggleChordMode();
         },
-
-        // S : Ajouter Silence (Ajout rapide de 1 unité pour être fluide)
         const SingleActivator(LogicalKeyboardKey.space): () {
           provider.addSilence(1, screenHeight);
         },
-
-        // Backspace : Supprimer Silence (Suppression rapide de 1 unité)
         const SingleActivator(LogicalKeyboardKey.backspace): () {
           provider.removeSilence(1, screenHeight);
         },
+        const SingleActivator(LogicalKeyboardKey.delete): () {
+          provider.deleteLastNote(context);
+        },
+        const SingleActivator(LogicalKeyboardKey.keyV): () {
+          provider.setShowAllTracksInEdit(!provider.showAllTracksInEdit);
+        },
 
         // --- 4. APPARENCE ---
-        // T : Ouvrir le Style
         const SingleActivator(LogicalKeyboardKey.keyT): () {
           Navigator.push(
             context,
@@ -115,7 +118,9 @@ class HomeScreen extends StatelessWidget {
         },
 
         // --- 5. SYSTÈME ---
-        // Escape : Panic (Kill all notes)
+        const SingleActivator(LogicalKeyboardKey.keyU): () {
+          provider.setAutoSilence(!provider.autoSilence);
+        },
         const SingleActivator(LogicalKeyboardKey.escape): () {
           provider.panic();
         },

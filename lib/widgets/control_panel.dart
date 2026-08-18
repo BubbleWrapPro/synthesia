@@ -35,8 +35,10 @@ class ControlPanel extends StatelessWidget {
                     itemBuilder: (context) => [
                       const PopupMenuItem(value: 'save', child: Text("Sauvegarder (Ctrl+S)")),
                       const PopupMenuItem(value: 'load', child: Text("Importer (Ctrl+O)")),
-                      const PopupMenuItem(value: 'sf2', child: Text("Charger SoundFont")),
-                      const PopupMenuItem(value: 'midi', child: Text("Réinit MIDI")),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(value: 'sf2', child: Text("Charger SoundFont (Ctrl+F)")),
+                      const PopupMenuItem(value: 'built_in', child: Text("SoundFonts Intégrés")),
+                      const PopupMenuItem(value: 'midi', child: Text("Réinit MIDI (Ctrl+M)")),
                       const PopupMenuDivider(),
                     ],
                   ),
@@ -101,6 +103,8 @@ class ControlPanel extends StatelessWidget {
                             onChanged: (v) => provider.setShowAllTracksInEdit(v ?? false),
                           ),
                         ),
+                        const SizedBox(width: 4),
+                        const Text("(V)", style: TextStyle(fontSize: 8, color: Colors.grey)),
                       ],
                     ),
                   ]),
@@ -202,6 +206,12 @@ class ControlPanel extends StatelessWidget {
                 const VerticalDivider(width: 10),
 
                 // 6. SYSTÈME & STYLE (Regroupés)
+                IconButton(
+                  tooltip: "Raccourcis Clavier",
+                  icon: const Icon(Icons.help_outline, color: Colors.blueGrey),
+                  onPressed: () => _showShortcutsDialog(context),
+                ),
+
                 PopupMenuButton<String>(
                   tooltip: "Paramètres & Style",
                   icon: const Icon(Icons.settings, color: Colors.grey),
@@ -220,7 +230,7 @@ class ControlPanel extends StatelessWidget {
                         value: 'auto',
                         child: Row(
                           children: [
-                            const Text("Auto Silence"),
+                            const Text("Auto Silence (U)"),
                             const Spacer(),
                             Checkbox(value: provider.autoSilence, onChanged: (v) => provider.setAutoSilence(v ?? false)),
                           ],
@@ -345,5 +355,95 @@ class ControlPanel extends StatelessWidget {
         )
       ],
     ));
+  }
+
+  void _showShortcutsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.keyboard, color: Colors.blue),
+            SizedBox(width: 10),
+            Text("Raccourcis Clavier"),
+          ],
+        ),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _shortcutGroup("Fichier", [
+                  _shortcutItem("Sauvegarder", "Ctrl + S"),
+                  _shortcutItem("Importer", "Ctrl + O"),
+                  _shortcutItem("Charger SoundFont", "Ctrl + F"),
+                  _shortcutItem("Réinit MIDI", "Ctrl + M"),
+                ]),
+                const Divider(),
+                _shortcutGroup("Édition", [
+                  _shortcutItem("Mode Accord", "A"),
+                  _shortcutItem("Ajouter Silence", "Espace"),
+                  _shortcutItem("Supprimer Silence", "Retour Arrière"),
+                  _shortcutItem("Effacer dernière Note", "Suppr"),
+                  _shortcutItem("Tout Effacer", "Ctrl + Suppr"),
+                  _shortcutItem("Afficher toutes les pistes", "V"),
+                ]),
+                const Divider(),
+                _shortcutGroup("Lecture & Système", [
+                  _shortcutItem("Mode Jouer / Stop", "P"),
+                  _shortcutItem("Apparence", "T"),
+                  _shortcutItem("Auto-silence", "U"),
+                  _shortcutItem("PANIC (Silence complet)", "Echap"),
+                ]),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Fermer"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _shortcutGroup(String title, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+        ),
+        ...children,
+      ],
+    );
+  }
+
+  Widget _shortcutItem(String label, String key) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 13)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.grey[400]!),
+            ),
+            child: Text(
+              key,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
