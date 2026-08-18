@@ -27,7 +27,6 @@ class ControlPanel extends StatelessWidget {
                     tooltip: "Fichier",
                     icon: const Icon(Icons.file_copy, color: Colors.orange),
                     onSelected: (val) {
-                      if (val == 'clear') provider.clearSession();
                       if (val == 'save') provider.saveToFile();
                       if (val == 'load') provider.importFile();
                       if (val == 'midi') provider.initMidi();
@@ -53,6 +52,7 @@ class ControlPanel extends StatelessWidget {
                       if (val == 'rm_silence') _dialogRemoveSilence(context, provider);
                       if (val == 'del_note') provider.deleteLastNote(context);
                       if (val == 'chord') provider.toggleChordMode();
+                      if (val == 'clear') provider.clearSession();
                     },
                     itemBuilder: (context) => [
                       PopupMenuItem(
