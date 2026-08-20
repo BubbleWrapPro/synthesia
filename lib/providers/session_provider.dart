@@ -6,7 +6,6 @@ import 'package:file_selector/file_selector.dart';
 import '../models/note_model.dart';
 import 'package:flutter/services.dart';
 import 'package:dart_midi_pro/dart_midi_pro.dart';
-import 'package:flutter_midi/flutter_midi.dart';
 import 'package:flutter_midi_pro/flutter_midi_pro.dart';
 
 enum AppMode { edit, play }
@@ -15,7 +14,6 @@ class SessionProvider with ChangeNotifier {
 
   // --- CONFIGURATION MIDI ---
   static const MethodChannel _midiChannel = MethodChannel('com.synthesia.midi');
-  final FlutterMidi _flutterMidi = FlutterMidi();
   final MidiPro _midiPro = MidiPro();
   bool _isCustomSf2LoadedOnWindows = false;
   int _currentSfId = 1;
@@ -46,8 +44,8 @@ class SessionProvider with ChangeNotifier {
     }
     try {
       // Default sound for mobile
-      ByteData byteData = await rootBundle.load("assets/sounds/Piano_1.sf2");
-      await _flutterMidi.prepare(sf2: byteData, name: "Piano_1.sf2");
+      await _ensureMidiProInitialized();
+      _currentSfId = await _midiPro.loadSoundfontAsset(assetPath: "assets/sounds/Piano_1.sf2");
       _currentSoundFontName = "Piano_1.sf2";
       debugPrint("SoundFont loaded: Piano_1.sf2");
     } catch (e) {
@@ -61,22 +59,23 @@ class SessionProvider with ChangeNotifier {
 
     if (file != null) {
       debugPrint("--- LOADING SF2 ---");
-      
+
       try {
+        await _ensureMidiProInitialized();
         if (Platform.isWindows) {
-          await _ensureMidiProInitialized();
           // Version 4.0.4+ supports absolute paths on Windows via FluidSynth
           _currentSfId = await _midiPro.loadSoundfontFile(filePath: file.path);
           _currentSoundFontName = file.name;
           _isCustomSf2LoadedOnWindows = true;
           debugPrint("Windows: Loaded SF2 via flutter_midi_pro: ${file.path}");
         } else {
-          // Mobile: Bytes-based loading via flutter_midi
+          // Mobile: Bytes-based loading via flutter_midi_pro
           final Uint8List bytes = await file.readAsBytes();
-          await _flutterMidi.prepare(sf2: ByteData.view(bytes.buffer), name: file.name);
+          _currentSfId = await _midiPro.loadSoundfontData(data: bytes);
           _currentSoundFontName = file.name;
+          debugPrint("Mobile: Loaded SF2 via flutter_midi_pro: ${file.name}");
         }
-        
+
         notifyListeners();
       } catch (e) {
         debugPrint("Error loading SoundFont: $e");
@@ -99,7 +98,7 @@ class SessionProvider with ChangeNotifier {
         });
       }
     } else {
-      _flutterMidi.playMidiNote(midi: midiNote);
+      _midiPro.playNote(key: midiNote, velocity: velocity, sfId: _currentSfId);
     }
   }
 
@@ -111,14 +110,14 @@ class SessionProvider with ChangeNotifier {
         _midiChannel.invokeMethod('stopMidiNote', midiNote);
       }
     } else {
-      _flutterMidi.stopMidiNote(midi: midiNote);
+      _midiPro.stopNote(key: midiNote, sfId: _currentSfId);
     }
   }
 
   /// Kills all active notes and resets MIDI state (Panic Button)
   void panic() {
     debugPrint("MIDI Panic: Stopping all notes...");
-    
+
     if (Platform.isWindows) {
       if (_isCustomSf2LoadedOnWindows) {
         _midiPro.stopAllNotes(sfId: _currentSfId);
@@ -130,9 +129,7 @@ class SessionProvider with ChangeNotifier {
       }
     } else {
       // Mobile loop
-      for (int i = 0; i < 128; i++) {
-        _flutterMidi.stopMidiNote(midi: i);
-      }
+      _midiPro.stopAllNotes(sfId: _currentSfId);
     }
 
     _activeKeys.clear();
@@ -140,7 +137,7 @@ class SessionProvider with ChangeNotifier {
     _sustainedNotes.clear();
     _activeRecordingNotes.clear();
     _lastNoteIdStarted.clear();
-    
+
     notifyListeners();
   }
 
@@ -199,7 +196,7 @@ class SessionProvider with ChangeNotifier {
   // Multi-Pistes [NEW]
   int _currentTrackId = 0;
   final Set<int> _activeTracks = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}; // Tracks actives pour la lecture
-  
+
   // Anti-Coupure [NEW] : Stocke l'ID de la dernière note ayant déclenché un son pour chaque touche
   final Map<int, String> _lastNoteIdStarted = {};
 
@@ -349,7 +346,7 @@ class SessionProvider with ChangeNotifier {
 
     _playbackPosition += amount;
     if (_playbackPosition < 0) _playbackPosition = 0;
-    
+
     // Calculate max song position
     final trackMaxOffsets = _getTrackMaxOffsets();
     double globalMaxOffset = 0;
@@ -395,7 +392,7 @@ class SessionProvider with ChangeNotifier {
 
     for (var note in _session) {
       if (!_activeTracks.contains(note.trackId)) continue;
-      
+
       double trackMax = trackMaxOffsets[note.trackId] ?? 0.0;
       double noteStartInSong = (trackMax - (note.currentOffset + note.height)) * pixelRatio;
       double playingEndInSong = (trackMax - (note.currentOffset + note.height - note.playingHeight)) * pixelRatio;
@@ -521,7 +518,7 @@ class SessionProvider with ChangeNotifier {
       // 1. Condition d'arrêt (Pause)
       // On ne génère du silence que si la session a déjà commencé (au moins une note)
       bool sessionStarted = _session.isNotEmpty;
-      
+
       if (_activeRecordingNotes.isEmpty && _sustainedNotes.isEmpty && (!_autoSilence || !sessionStarted)) {
         return;
       }
@@ -613,7 +610,7 @@ class SessionProvider with ChangeNotifier {
     // En mode manuel sans accord, on pousse les autres vers le haut
     if (!_isChordMode) {
       for (var note in _session) {
-        if (note.trackId == targetTrackId && note.currentOffset >= insertionOffset) { 
+        if (note.trackId == targetTrackId && note.currentOffset >= insertionOffset) {
           note.currentOffset += h;
         }
       }
@@ -631,16 +628,16 @@ class SessionProvider with ChangeNotifier {
 
     for(int i=0; i<length; i++) {
       String cId = "${DateTime.now().toIso8601String()}_$i";
-      for (var note in _session) { 
-        if (note.trackId == targetTrackId && note.currentOffset >= insertionOffset) { 
-          note.currentOffset += 1.0; 
+      for (var note in _session) {
+        if (note.trackId == targetTrackId && note.currentOffset >= insertionOffset) {
+          note.currentOffset += 1.0;
         }
       }
       _session.add(NoteModel(
-        keyIndex: -1, 
-        height: 1.0, 
-        color: Colors.transparent, 
-        chordId: cId, 
+        keyIndex: -1,
+        height: 1.0,
+        color: Colors.transparent,
+        chordId: cId,
         isSilence: true,
         trackId: targetTrackId, // [NEW]
         currentOffset: insertionOffset,
@@ -659,9 +656,9 @@ class SessionProvider with ChangeNotifier {
       final idx = _session.lastIndexWhere((n) => n.trackId == targetTrackId && n.isSilence && (n.currentOffset - insertionOffset).abs() < 0.01);
       if (idx != -1) {
         _session.removeAt(idx);
-        for (var note in _session) { 
+        for (var note in _session) {
           if (note.trackId == targetTrackId && note.currentOffset > insertionOffset) {
-            note.currentOffset -= 1.0; 
+            note.currentOffset -= 1.0;
           }
         }
       } else {
@@ -705,11 +702,12 @@ class SessionProvider with ChangeNotifier {
     );
 
     // 2. Native Windows update (Actual title bar)
-    // We use the existing MIDI channel to send a custom command to our C++ code
-    try {
-      _midiChannel.invokeMethod('setWindowTitle', windowTitle);
-    } catch (e) {
-      // debugPrint("Native title update failed: $e");
+    if (Platform.isWindows) {
+      try {
+        _midiChannel.invokeMethod('setWindowTitle', windowTitle);
+      } catch (e) {
+        // debugPrint("Native title update failed: $e");
+      }
     }
   }
 
