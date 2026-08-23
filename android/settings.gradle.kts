@@ -1,4 +1,28 @@
 pluginManagement {
+    // TOTAL PROCESS WIPE: Forcefully resolve Java 25 crash and AGP environment conflicts
+    run {
+        System.setProperty("java.version", "17.0.12")
+        System.setProperty("java.specification.version", "17")
+        System.setProperty("ANDROID_USER_HOME", "C:/Users/Thomas/.android")
+        System.clearProperty("ANDROID_PREFS_ROOT")
+        System.clearProperty("ANDROID_SDK_HOME")
+        
+        try {
+            val processEnvClass = Class.forName("java.lang.ProcessEnvironment")
+            val fields = listOf("theEnvironment", "theCaseInsensitiveEnvironment")
+            for (fieldName in fields) {
+                try {
+                    val field = processEnvClass.getDeclaredField(fieldName)
+                    field.isAccessible = true
+                    val env = field.get(null) as MutableMap<String, String>
+                    env.remove("ANDROID_PREFS_ROOT")
+                    env.remove("ANDROID_SDK_HOME")
+                    env["ANDROID_USER_HOME"] = "C:\\Users\\Thomas\\.android"
+                } catch (e: Exception) {}
+            }
+        } catch (e: Exception) {}
+    }
+
     val flutterSdkPath =
         run {
             val properties = java.util.Properties()

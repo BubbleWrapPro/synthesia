@@ -546,14 +546,14 @@ class SessionProvider with ChangeNotifier {
           note.currentOffset += speed;
 
           // Décroissance du volume (Sustain Decay)
-          // On réduit d'environ 1% par frame (arbitraire, ajustable)
+          // On réduit d'environ 0.5% par frame (plus naturel)
           double currentV = _liveDecayVelocities[note.keyIndex] ?? 0;
           if (currentV > 0) {
-            double decay = (currentV * 0.01).clamp(0.5, 5.0);
+            double decay = (currentV * 0.005).clamp(0.2, 2.0);
             double newV = (currentV - decay).clamp(0, 127);
             _liveDecayVelocities[note.keyIndex] = newV;
 
-            if (newV <= 0) {
+            if (newV <= 0.5) {
               _stopNote(note.keyIndex + 21);
               _sustainedNotes.remove(note.keyIndex);
               _liveDecayVelocities.remove(note.keyIndex);
@@ -755,10 +755,25 @@ class SessionProvider with ChangeNotifier {
         globalMaxOffset = trackMaxOffsets.values.fold(0, (a, b) => a > b ? a : b);
       }
 
-      // On pré-remplit les notes actives qui sont déjà dans la zone de chute
-      _recalculateActiveFallingNotes(screenHeight, trackMaxOffsets);
+    // Pre-calculate which notes should be audible (impacted) at the current _playbackPosition
+    for (var note in _session) {
+      if (!_activeTracks.contains(note.trackId)) continue;
 
-      _animTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
+      double trackMax = trackMaxOffsets[note.trackId] ?? 0.0;
+      double noteStartInSong = (trackMax - (note.currentOffset + note.height)) * pixelRatio;
+      double playingEndInSong = (trackMax - (note.currentOffset + note.height - note.playingHeight)) * pixelRatio;
+
+      // If the note is currently in its "playing" window
+      if (noteStartInSong <= _playbackPosition && playingEndInSong > _playbackPosition) {
+        if (!note.isSilence) {
+          // Trigger the sound immediately if it hasn't been triggered or we are resuming
+          _playNote(note.keyIndex + 21, velocity: note.velocity);
+          _lastNoteIdStarted[note.keyIndex] = note.id;
+        }
+      }
+    }
+
+    _animTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
         if (!_isPlaying || _isPaused) {
           timer.cancel();
           return;
@@ -825,16 +840,26 @@ class SessionProvider with ChangeNotifier {
 
       // 3. Nettoyage
       _activeFallingNotes.removeWhere((n) {
+        // Visual cleanup
+        bool visualFinished = n.currentOffset + (n.height * pixelRatio) < -cascadeHeight;
+
+        // Sound cleanup logic
         bool soundFinished = n.currentOffset + (n.playingHeight * pixelRatio) < _fallingY;
+        
         if (soundFinished && !n.isSilence) {
           // [NEW] On ne coupe le son que si c'est bien CETTE instance qui a démarré le son en dernier
           // Cela évite de couper une note identique qui vient de redémarrer (overlapping)
           if (_lastNoteIdStarted[n.keyIndex] == n.id) {
             _stopNote(n.keyIndex + 21);
+            _lastNoteIdStarted.remove(n.keyIndex);
           }
-          _fallingNotes.remove(n);
         }
-        return soundFinished;
+        
+        if (visualFinished) {
+          _fallingNotes.remove(n);
+          return true;
+        }
+        return false;
       });
 
       // Fin du morceau : Plus rien à injecter et plus de notes actives
@@ -1191,6 +1216,7 @@ class SessionProvider with ChangeNotifier {
       String chordId = DateTime.fromMillisecondsSinceEpoch(startMs).toIso8601String();
 
       targetList.add(NoteModel(
+        id: "midi_${trackId}_${startTime}_${noteNumber}_${(100 + (noteNumber % 900))}",
         keyIndex: keyIndex,
         height: visualHeight,
         playingHeight: playingHeight,

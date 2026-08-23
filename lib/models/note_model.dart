@@ -29,8 +29,8 @@ class NoteModel {
     this.trackId = 0,
     this.velocity = 100, // Default to standard volume
     this.currentOffset = 0.0,
-  }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString() + keyIndex.toString(),
-       playingHeight = playingHeight ?? height;
+  }) : id = id ?? "${DateTime.now().microsecondsSinceEpoch}_${keyIndex}_${(100 + (id.hashCode % 900))}",
+       playingHeight = (playingHeight ?? height) < height ? height : (playingHeight ?? height);
 
   // Convert to JSON
   Map<String, dynamic> toJson() => {

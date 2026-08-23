@@ -34,8 +34,6 @@ dependencies:
   file_selector: ^1.0.0     # File I/O without issues
   path_provider: ^2.0.0     # Finding save paths
   intl: ^0.18.0             # Date formatting (optional)
-  flutter_midi_command: ^0.4.14 # MIDI connectivity (USB/Bluetooth)
-  flutter_midi: ^1.0.0+rc.11   # SoundFont playback
   flutter_midi_pro: ^4.0.4              # High-quality SoundFont playback (Latest)
   dart_midi_pro: ^1.0.2         # MIDI Parser
 
