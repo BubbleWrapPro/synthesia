@@ -118,4 +118,13 @@ app.*.symbols
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
 .artifacts/
-/.idea/caches
+
+# IntelliJ IDEA / Android Studio
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/dictionary.xml
+.idea/shelf/
+.idea/caches/
+.idea/assetWizardSettings.xml
+.idea/deploymentTargetSelector.xml
