@@ -54,7 +54,11 @@ class SessionProvider with ChangeNotifier {
   }
 
   Future<void> pickAndLoadSoundFont() async {
-    const XTypeGroup typeGroup = XTypeGroup(label: 'SoundFonts', extensions: <String>['sf2']);
+    const XTypeGroup typeGroup = XTypeGroup(
+      label: 'SoundFonts',
+      extensions: <String>['sf2'],
+      mimeTypes: <String>['application/x-font-sfb', 'application/octet-stream'],
+    );
     final XFile? file = await openFile(acceptedTypeGroups: [typeGroup]);
 
     if (file != null) {
@@ -902,10 +906,14 @@ class SessionProvider with ChangeNotifier {
   }
 
   Future<void> importFile() async {
-    const XTypeGroup jsonGroup = XTypeGroup(label: 'JSON files', extensions: <String>['json']);
-    const XTypeGroup midiGroup = XTypeGroup(label: 'MIDI files', extensions: <String>['mid', 'midi']);
+    const XTypeGroup typeGroup = XTypeGroup(
+      label: 'Notes',
+      extensions: <String>['json', 'mid', 'midi', 'rtx'],
+      mimeTypes: <String>['application/json', 'audio/midi', 'audio/x-midi'],
+    );
 
-    final XFile? file = await openFile(acceptedTypeGroups: <XTypeGroup>[jsonGroup, midiGroup]);
+    final XFile? file = await openFile(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
+    debugPrint("File selected: ${file?.name} (path: ${file?.path})");
 
     if (file != null) {
       String extension = file.name.split('.').last.toLowerCase();
@@ -927,12 +935,18 @@ class SessionProvider with ChangeNotifier {
           _currentFileName = file.name;
           _updateSystemTitle();
           notifyListeners();
+          debugPrint("Imported ${rawNotes.length} notes from JSON");
         } catch (e) {
           debugPrint("Erreur import JSON: $e");
         }
-      } else if (extension == 'mid' || extension == 'midi') {
+      } else if (extension == 'mid' || extension == 'midi' || extension == 'rtx') {
+        await _importMidiFile(file);
+      } else {
+        debugPrint("Extension non supportée pour l'import ($extension), tentative d'import MIDI par défaut...");
         await _importMidiFile(file);
       }
+    } else {
+      debugPrint("Import annulé: aucun fichier sélectionné");
     }
   }
 
@@ -1089,15 +1103,16 @@ class SessionProvider with ChangeNotifier {
 
   Future<void> _importMidiFile(XFile file) async {
     try {
+      debugPrint("Starting MIDI import for: ${file.name}");
       final bytes = await file.readAsBytes();
+      debugPrint("Read ${bytes.length} bytes");
       final parser = MidiParser();
       final parsedMidi = parser.parseMidiFromBuffer(bytes.toList());
+      debugPrint("Parsed MIDI: Header PPQ=${parsedMidi.header.ticksPerBeat}, Tracks=${parsedMidi.tracks.length}");
 
       List<NoteModel> rawNotes = [];
       int ppq = parsedMidi.header.ticksPerBeat ?? 120;
       int currentBpm = 120;
-
-      debugPrint("MIDI Header: PPQ=$ppq, Tracks=${parsedMidi.tracks.length}");
 
       for (int t = 0; t < parsedMidi.tracks.length; t++) {
         var track = parsedMidi.tracks[t];
@@ -1184,15 +1199,19 @@ class SessionProvider with ChangeNotifier {
         }
       }
 
+      debugPrint("Imported ${rawNotes.length} notes from MIDI");
       if (rawNotes.isNotEmpty) {
         _reconstructMidiOffsets(rawNotes);
         _session = rawNotes;
         _currentFileName = file.name;
         _updateSystemTitle();
         notifyListeners();
+      } else {
+        debugPrint("Warning: MIDI file contains no notes!");
       }
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint("Erreur import fichier MIDI: $e");
+      debugPrint(stack.toString());
     }
   }
 
