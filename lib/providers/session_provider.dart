@@ -53,7 +53,7 @@ class SessionProvider with ChangeNotifier {
     }
   }
 
-  Future<void> pickAndLoadSoundFont() async {
+  Future<void> pickAndLoadSoundFont({BuildContext? context}) async {
     const XTypeGroup typeGroup = XTypeGroup(
       label: 'SoundFonts',
       extensions: <String>['sf2'],
@@ -62,6 +62,17 @@ class SessionProvider with ChangeNotifier {
     final XFile? file = await openFile(acceptedTypeGroups: [typeGroup]);
 
     if (file != null) {
+      if (!file.name.toLowerCase().endsWith('.sf2')) {
+        debugPrint("Erreur: Le fichier sélectionné n'est pas un SoundFont (.sf2 valide)");
+        if (context != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Veuillez sélectionner un fichier SoundFont (.sf2) valide. Les fichiers JSON doivent être importés via le menu Notes.")),
+          );
+        }
+        _currentSoundFontName = "Format invalide (.sf2 requis)";
+        notifyListeners();
+        return;
+      }
       debugPrint("--- LOADING SF2 ---");
 
       try {
@@ -905,11 +916,11 @@ class SessionProvider with ChangeNotifier {
     }
   }
 
-  Future<void> importFile() async {
+  Future<void> importFile({BuildContext? context}) async {
     const XTypeGroup typeGroup = XTypeGroup(
-      label: 'Notes',
+      label: 'Notes & MIDI',
       extensions: <String>['json', 'mid', 'midi', 'rtx'],
-      mimeTypes: <String>['application/json', 'audio/midi', 'audio/x-midi'],
+      mimeTypes: <String>['application/json', 'text/plain', 'audio/midi', 'audio/x-midi', 'application/octet-stream'],
     );
 
     final XFile? file = await openFile(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
@@ -919,8 +930,8 @@ class SessionProvider with ChangeNotifier {
       String extension = file.name.split('.').last.toLowerCase();
 
       if (extension == 'json') {
-        String content = await file.readAsString();
         try {
+          String content = await file.readAsString();
           List<dynamic> jsonList = jsonDecode(content);
           List<NoteModel> rawNotes = jsonList.map((e) => NoteModel.fromJson(e)).toList();
 
@@ -938,6 +949,11 @@ class SessionProvider with ChangeNotifier {
           debugPrint("Imported ${rawNotes.length} notes from JSON");
         } catch (e) {
           debugPrint("Erreur import JSON: $e");
+          if (context != null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("Erreur lors de l'import du fichier JSON : $e")),
+            );
+          }
         }
       } else if (extension == 'mid' || extension == 'midi' || extension == 'rtx') {
         await _importMidiFile(file);

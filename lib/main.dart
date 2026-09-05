@@ -80,10 +80,10 @@ class HomeScreen extends StatelessWidget {
           provider.saveToFile();
         },
         const SingleActivator(LogicalKeyboardKey.keyO, control: true): () {
-          provider.importFile();
+          provider.importFile(context: context);
         },
         const SingleActivator(LogicalKeyboardKey.keyF, control: true): () {
-          provider.pickAndLoadSoundFont();
+          provider.pickAndLoadSoundFont(context: context);
         },
         const SingleActivator(LogicalKeyboardKey.keyM, control: true): () {
           provider.initMidi();

@@ -28,9 +28,9 @@ class ControlPanel extends StatelessWidget {
                     icon: const Icon(Icons.file_copy, color: Colors.orange),
                     onSelected: (val) {
                       if (val == 'save') provider.saveToFile();
-                      if (val == 'load') provider.importFile();
+                      if (val == 'load') provider.importFile(context: context);
                       if (val == 'midi') provider.initMidi();
-                      if (val == 'sf2') provider.pickAndLoadSoundFont();
+                      if (val == 'sf2') provider.pickAndLoadSoundFont(context: context);
                     },
                     itemBuilder: (context) => [
                       const PopupMenuItem(value: 'save', child: Text("Sauvegarder (Ctrl+S)")),
