@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'providers/session_provider.dart';
 import 'providers/style_provider.dart';
@@ -43,6 +44,27 @@ class MyApp extends StatelessWidget {
         return MaterialApp(
           title: windowTitle,
           theme: ThemeData(primarySwatch: Colors.blue),
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('fr', ''),
+            Locale('en', ''),
+          ],
+          localeListResolutionCallback: (locales, supportedLocales) {
+            if (locales != null) {
+              for (final locale in locales) {
+                for (final supportedLocale in supportedLocales) {
+                  if (locale.languageCode == supportedLocale.languageCode) {
+                    return supportedLocale;
+                  }
+                }
+              }
+            }
+            return supportedLocales.first;
+          },
           // Title widget force la mise à jour au niveau de l'OS (Desktop)
           home: Title(
             title: windowTitle,

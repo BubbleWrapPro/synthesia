@@ -30,10 +30,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   provider: ^6.0.0          # State Management
   file_selector: ^1.0.0     # File I/O without issues
   path_provider: ^2.0.0     # Finding save paths
-  intl: ^0.18.0             # Date formatting (optional)
+  intl: ^0.20.2             # Date formatting (optional)
   flutter_midi_pro: ^4.0.4              # High-quality SoundFont playback (Latest)
   dart_midi_pro: ^1.0.2         # MIDI Parser
 
@@ -98,3 +100,12 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+msix_config:
+  display_name: Synthesia
+  publisher_display_name: Synthesia
+  identity_name: com.synthesia.synthesia
+  msix_version: 1.0.0.0
+  logo_path: windows/runner/resources/app_icon.ico
+  sign_msix: true
+

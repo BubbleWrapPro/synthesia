@@ -150,16 +150,35 @@ class AppLocalizations {
 
   static String get(BuildContext context, String key, [Map<String, String>? params]) {
     String lang = 'en';
+
+    // 1. Try context localizations
     try {
       final locale = Localizations.localeOf(context).languageCode;
       if (_localizedValues.containsKey(locale)) {
         lang = locale;
       }
-    } catch (_) {
-      final platformLocale = WidgetsBinding.instance.platformDispatcher.locale.languageCode;
-      if (_localizedValues.containsKey(platformLocale)) {
-        lang = platformLocale;
-      }
+    } catch (_) {}
+
+    // 2. Try platform dispatcher preferred locales (handles OS language preference list on Windows/Mac/Linux/Mobile)
+    if (lang == 'en') {
+      try {
+        for (final locale in WidgetsBinding.instance.platformDispatcher.locales) {
+          if (_localizedValues.containsKey(locale.languageCode)) {
+            lang = locale.languageCode;
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. Try primary platform locale
+    if (lang == 'en') {
+      try {
+        final platformLocale = WidgetsBinding.instance.platformDispatcher.locale.languageCode;
+        if (_localizedValues.containsKey(platformLocale)) {
+          lang = platformLocale;
+        }
+      } catch (_) {}
     }
 
     String text = _localizedValues[lang]?[key] ?? _localizedValues['en']?[key] ?? key;
