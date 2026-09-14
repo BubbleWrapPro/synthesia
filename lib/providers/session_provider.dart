@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 import '../models/note_model.dart';
+import '../l10n.dart';
 import 'package:flutter/services.dart';
 import 'package:dart_midi_pro/dart_midi_pro.dart';
 import 'package:flutter_midi_pro/flutter_midi_pro.dart';
@@ -66,7 +67,7 @@ class SessionProvider with ChangeNotifier {
         debugPrint("Erreur: Le fichier sélectionné n'est pas un SoundFont (.sf2 valide)");
         if (context != null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Veuillez sélectionner un fichier SoundFont (.sf2) valide. Les fichiers JSON doivent être importés via le menu Notes.")),
+            SnackBar(content: Text(t(context, 'error_invalid_sf2'))),
           );
         }
         _currentSoundFontName = "Format invalide (.sf2 requis)";
@@ -133,7 +134,7 @@ class SessionProvider with ChangeNotifier {
       debugPrint("Built-in SoundFont loaded successfully: $displayName");
       if (context != null && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("SoundFont intégré chargé : $displayName")),
+          SnackBar(content: Text(t(context, 'soundfont_loaded', {'name': displayName}))),
         );
       }
       notifyListeners();
@@ -141,7 +142,7 @@ class SessionProvider with ChangeNotifier {
       debugPrint("Error loading built-in SoundFont $displayName: $e");
       if (context != null && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Erreur lors du chargement de $displayName")),
+          SnackBar(content: Text(t(context, 'soundfont_error', {'name': displayName}))),
         );
       }
     }
@@ -998,7 +999,7 @@ class SessionProvider with ChangeNotifier {
           debugPrint("Erreur import JSON: $e");
           if (context != null) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Erreur lors de l'import du fichier JSON : $e")),
+              SnackBar(content: Text(t(context, 'json_import_error', {'error': e.toString()}))),
             );
           }
         }
@@ -1151,7 +1152,7 @@ class SessionProvider with ChangeNotifier {
     if (_session.isEmpty) {
 
       // Toast pour avertir l'utilisateur qu'il n'y a pas de notes à supprimer
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Aucune note à effacer.")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t(context, 'error_no_note'))));
 
       return;
     }

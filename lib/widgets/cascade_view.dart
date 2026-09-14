@@ -6,6 +6,7 @@ import '../providers/session_provider.dart';
 import '../providers/style_provider.dart';
 import '../models/note_model.dart';
 import '../models/style_config.dart';
+import '../l10n.dart';
 
 class CascadeView extends StatelessWidget {
   const CascadeView({super.key});
@@ -95,17 +96,17 @@ class CascadeView extends StatelessWidget {
     final heightCtrl = TextEditingController(text: note.height.toString());
 
     showDialog(context: context, builder: (_) => AlertDialog(
-      title: const Text("Modifier la note"),
+      title: Text(t(context, 'edit_note')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             controller: heightCtrl,
-            decoration: const InputDecoration(labelText: "Durée (Hauteur)"),
+            decoration: InputDecoration(labelText: t(context, 'duration_height')),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
           ),
           const SizedBox(height: 20),
-          const Text("Couleur:"),
+          Text(t(context, 'color')),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -121,7 +122,7 @@ class CascadeView extends StatelessWidget {
                 prov.updateNote(note, note.height, null);
                 Navigator.pop(context);
               },
-              child: const Text("Réinitialiser la couleur"),
+              child: Text(t(context, 'reset_color')),
             ),
         ],
       ),
@@ -131,7 +132,7 @@ class CascadeView extends StatelessWidget {
             prov.deleteNote(note); 
             Navigator.pop(context);
           },
-          child: const Text("Supprimer", style: TextStyle(color: Colors.red)),
+          child: Text(t(context, 'delete'), style: const TextStyle(color: Colors.red)),
         ),
         TextButton(
           onPressed: () {
@@ -139,7 +140,7 @@ class CascadeView extends StatelessWidget {
             if(newH != null) prov.updateNote(note, newH, note.overrideColor);
             Navigator.pop(context);
           },
-          child: const Text("Valider"),
+          child: Text(t(context, 'validate')),
         ),
       ],
     ));
@@ -171,8 +172,6 @@ class CascadeViewPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Clip the canvas to ensure notes are only seen within this widget's bounds
-    // (This is naturally handled by CustomPaint but explicit clip ensures it)
     canvas.clipRect(Offset.zero & size);
     
     // Fill background
@@ -194,7 +193,6 @@ class CascadeViewPainter extends CustomPainter {
         ? provider.activeFallingNotes 
         : provider.session.where((n) => provider.showAllTracksInEdit || n.trackId == provider.currentTrackId).toList();
 
-    // Separate notes for gradient vs solid
     List<Rect> maskedRects = [];
     List<MapEntry<Rect, Color>> unmaskedRects = [];
 
@@ -212,8 +210,6 @@ class CascadeViewPainter extends CustomPainter {
 
       if (bottomPos > size.height || bottomPos + height < 0) continue;
 
-      // Note coordinates: Flutter canvas (0,0) is top-left.
-      // bottomPos is distance from bottom.
       Rect rect = Rect.fromLTWH(left, size.height - bottomPos - height, width, height);
 
       bool hasOverride = note.overrideColor != null;
@@ -264,16 +260,13 @@ class CascadeViewPainter extends CustomPainter {
     RRect rRect = RRect.fromRectAndRadius(rect, const Radius.circular(1.5));
     canvas.drawRRect(rRect, paint);
 
-    // Border
     Paint borderPaint = Paint()
       ..color = Colors.white24
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.5;
     canvas.drawRRect(rRect, borderPaint);
 
-    // Bottom Bar (ensure separation)
     Paint barPaint = Paint()..color = Colors.black.withValues(alpha: 0.8)..style = PaintingStyle.fill;
-    // Bottom bar is 2px at the bottom of the note
     Rect barRect = Rect.fromLTWH(rect.left, rect.bottom - 2.0, rect.width, 2.0);
     canvas.drawRect(barRect, barPaint);
   }
@@ -297,6 +290,6 @@ class CascadeViewPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CascadeViewPainter oldDelegate) {
-    return true; // Simplified for robustness, RepaintBoundary handles optimization
+    return true;
   }
 }

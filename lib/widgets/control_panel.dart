@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/session_provider.dart';
 import '../pages/customization_page.dart';
+import '../l10n.dart';
 
 class ControlPanel extends StatelessWidget {
   const ControlPanel({super.key});
@@ -24,7 +25,7 @@ class ControlPanel extends StatelessWidget {
                 if (isEditMode) ...[
                   // 1. MENU FICHIER
                   PopupMenuButton<String>(
-                    tooltip: "Fichier",
+                    tooltip: t(context, 'file'),
                     icon: const Icon(Icons.file_copy, color: Colors.orange),
                     onSelected: (val) {
                       if (val == 'save') provider.saveToFile();
@@ -34,12 +35,12 @@ class ControlPanel extends StatelessWidget {
                       if (val == 'built_in') _showBuiltInSoundFontsDialog(context, provider);
                     },
                     itemBuilder: (context) => [
-                      const PopupMenuItem(value: 'save', child: Text("Sauvegarder (Ctrl+S)")),
-                      const PopupMenuItem(value: 'load', child: Text("Importer (Ctrl+O)")),
+                      PopupMenuItem(value: 'save', child: Text(t(context, 'save'))),
+                      PopupMenuItem(value: 'load', child: Text(t(context, 'load'))),
                       const PopupMenuDivider(),
-                      const PopupMenuItem(value: 'sf2', child: Text("Charger SoundFont (Ctrl+F)")),
-                      const PopupMenuItem(value: 'built_in', child: Text("SoundFonts Intégrés")),
-                      const PopupMenuItem(value: 'midi', child: Text("Réinit MIDI (Ctrl+M)")),
+                      PopupMenuItem(value: 'sf2', child: Text(t(context, 'soundfont'))),
+                      PopupMenuItem(value: 'built_in', child: Text(t(context, 'built_in'))),
+                      PopupMenuItem(value: 'midi', child: Text(t(context, 'midi_init'))),
                       const PopupMenuDivider(),
                     ],
                   ),
@@ -48,7 +49,7 @@ class ControlPanel extends StatelessWidget {
 
                   // 2. MENU ÉDITION
                   PopupMenuButton<String>(
-                    tooltip: "Édition",
+                    tooltip: t(context, 'edition'),
                     icon: const Icon(Icons.edit, color: Colors.blue),
                     onSelected: (val) {
                       if (val == 'silence') _dialogSilence(context, provider);
@@ -62,7 +63,7 @@ class ControlPanel extends StatelessWidget {
                         value: 'chord',
                         child: Row(
                           children: [
-                            const Text("Mode Accord (A)"),
+                            Text(t(context, 'chord_mode')),
                             const Spacer(),
                             Switch(
                               value: provider.isChordMode,
@@ -72,17 +73,17 @@ class ControlPanel extends StatelessWidget {
                           ],
                         ),
                       ),
-                      const PopupMenuItem(value: 'silence', child: Text("Ajouter Silence (Espace)")),
-                      const PopupMenuItem(value: 'rm_silence', child: Text("Suppr. Silence (Retour)")),
-                      const PopupMenuItem(value: 'del_note', child: Text("Effacer Note (Del)")),
-                      const PopupMenuItem(value: 'clear', child: Text("Tout Effacer", style: TextStyle(color: Colors.red))),
+                      PopupMenuItem(value: 'silence', child: Text(t(context, 'add_silence'))),
+                      PopupMenuItem(value: 'rm_silence', child: Text(t(context, 'rm_silence'))),
+                      PopupMenuItem(value: 'del_note', child: Text(t(context, 'del_note'))),
+                      PopupMenuItem(value: 'clear', child: Text(t(context, 'clear_all'), style: const TextStyle(color: Colors.red))),
                     ],
                   ),
 
                   const VerticalDivider(width: 10),
 
                   // 3. PISTE (Gardé visible car central)
-                  _actionGroup("Piste", [
+                  _actionGroup(t(context, 'track'), [
                     DropdownButton<int>(
                       value: provider.currentTrackId,
                       underline: Container(),
@@ -96,7 +97,7 @@ class ControlPanel extends StatelessWidget {
                     Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text("Toutes", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                        Text(t(context, 'all_tracks'), style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
                         SizedBox(
                           height: 20, width: 20,
                           child: Checkbox(
@@ -113,7 +114,7 @@ class ControlPanel extends StatelessWidget {
                   const VerticalDivider(width: 10),
 
                   // 4. LECTURE & BPM
-                  _actionGroup("Lecture", [
+                  _actionGroup(t(context, 'playback'), [
                     SizedBox(
                       width: 45,
                       child: TextField(
@@ -131,7 +132,7 @@ class ControlPanel extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                       ),
                       icon: const Icon(Icons.play_arrow, size: 20),
-                      label: const Text("JOUER (P)"),
+                      label: Text(t(context, 'play')),
                       onPressed: () => provider.playMusic(MediaQuery.of(context).size.height),
                     ),
                   ]),
@@ -156,9 +157,9 @@ class ControlPanel extends StatelessWidget {
                     ),
                   ]),
                 ] else ...[
-                  // PLAY MODE CONTROLS (Déjà assez compact, on garde l'essentiel)
-                  _actionGroup("Playback", [
-                    _btn("Édition", () => provider.setMode(AppMode.edit), Colors.purple),
+                  // PLAY MODE CONTROLS
+                  _actionGroup(t(context, 'playback'), [
+                    _btn(t(context, 'edition'), () => provider.setMode(AppMode.edit), Colors.purple),
                     const VerticalDivider(width: 10),
                     IconButton(icon: const Icon(Icons.replay, color: Colors.orange), onPressed: () => provider.restartMusic(MediaQuery.of(context).size.height)),
                     if (provider.isPlaying && !provider.isPaused)
@@ -183,8 +184,8 @@ class ControlPanel extends StatelessWidget {
                     ),
                   ]),
                   const VerticalDivider(width: 10),
-                  // Pistes à jouer (Reste visible pour le mixage)
-                  _actionGroup("Pistes",
+                  // Pistes à jouer
+                  _actionGroup(t(context, 'tracks'),
                     provider.availableTracks.map((tId) => Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Column(
@@ -206,15 +207,15 @@ class ControlPanel extends StatelessWidget {
 
                 const VerticalDivider(width: 10),
 
-                // 6. SYSTÈME & STYLE (Regroupés)
+                // 6. SYSTÈME & STYLE
                 IconButton(
-                  tooltip: "Raccourcis Clavier",
+                  tooltip: t(context, 'shortcuts'),
                   icon: const Icon(Icons.help_outline, color: Colors.blueGrey),
                   onPressed: () => _showShortcutsDialog(context),
                 ),
 
                 PopupMenuButton<String>(
-                  tooltip: "Paramètres & Style",
+                  tooltip: t(context, 'settings_style'),
                   icon: const Icon(Icons.settings, color: Colors.grey),
                   onSelected: (val) {
                     if (val == 'style') Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomizationPage()));
@@ -224,14 +225,14 @@ class ControlPanel extends StatelessWidget {
                   itemBuilder: (context) => [
                     PopupMenuItem(
                       value: 'style',
-                      child: Row(children: const [Icon(Icons.palette, size: 18), SizedBox(width: 8), Text("Apparence (T)")]),
+                      child: Row(children: [const Icon(Icons.palette, size: 18), const SizedBox(width: 8), Text(t(context, 'appearance'))]),
                     ),
                     if (isEditMode)
                       PopupMenuItem(
                         value: 'auto',
                         child: Row(
                           children: [
-                            const Text("Auto Silence (U)"),
+                            Text(t(context, 'auto_silence')),
                             const Spacer(),
                             Checkbox(value: provider.autoSilence, onChanged: (v) => provider.setAutoSilence(v ?? false)),
                           ],
@@ -240,7 +241,7 @@ class ControlPanel extends StatelessWidget {
                     const PopupMenuDivider(),
                     PopupMenuItem(
                       value: 'panic',
-                      child: Row(children: const [Icon(Icons.warning, color: Colors.red, size: 18), SizedBox(width: 8), Text("PANIC (Esc)", style: TextStyle(color: Colors.red))]),
+                      child: Row(children: [const Icon(Icons.warning, color: Colors.red, size: 18), const SizedBox(width: 8), Text(t(context, 'panic'), style: const TextStyle(color: Colors.red))]),
                     ),
                   ],
                 ),
@@ -293,14 +294,13 @@ class ControlPanel extends StatelessWidget {
     );
   }
 
-  // Popup for adding Silence
   void _dialogSilence(BuildContext context, SessionProvider prov) {
     final controller = TextEditingController(text: "1");
     showDialog(context: context, builder: (_) => AlertDialog(
-      title: const Text("Ajouter un silence"),
+      title: Text(t(context, 'add_silence_title')),
       content: TextField(
         controller: controller,
-        decoration: const InputDecoration(labelText: "Longueur (1-10)"),
+        decoration: InputDecoration(labelText: t(context, 'length')),
         keyboardType: TextInputType.number,
       ),
       actions: [
@@ -312,7 +312,7 @@ class ControlPanel extends StatelessWidget {
               Navigator.pop(context);
             }
           },
-          child: const Text("Ajouter"),
+          child: Text(t(context, 'add')),
         )
       ],
     ));
@@ -322,11 +322,11 @@ class ControlPanel extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.library_music, color: Colors.orange),
-            SizedBox(width: 10),
-            Text("SoundFonts Intégrés"),
+            const Icon(Icons.library_music, color: Colors.orange),
+            const SizedBox(width: 10),
+            Text(t(context, 'built_in')),
           ],
         ),
         content: SizedBox(
@@ -352,21 +352,19 @@ class ControlPanel extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Fermer"),
+            child: Text(t(context, 'close')),
           ),
         ],
       ),
     );
   }
 
-  // Popup for removing Silence
   void _dialogRemoveSilence(BuildContext context, SessionProvider prov) {
     if (prov.session.isEmpty || !prov.session.last.isSilence) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Erreur: La dernière tuile n'est pas un silence.")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t(context, 'error_no_silence'))));
       return;
     }
 
-    // Calculate max silence length available at the end
     int maxLen = 0;
     for (int i = prov.session.length - 1; i >= 0; i--) {
       if (prov.session[i].isSilence) {
@@ -378,10 +376,10 @@ class ControlPanel extends StatelessWidget {
 
     final controller = TextEditingController(text: "1");
     showDialog(context: context, builder: (_) => AlertDialog(
-      title: const Text("Supprimer Silence"),
+      title: Text(t(context, 'remove_silence_title')),
       content: TextField(
         controller: controller,
-        decoration: InputDecoration(labelText: "Combien retirer ? (Max: $maxLen)"),
+        decoration: InputDecoration(labelText: t(context, 'remove_silence_label', {'max': maxLen.toString()})),
         keyboardType: TextInputType.number,
       ),
       actions: [
@@ -393,7 +391,7 @@ class ControlPanel extends StatelessWidget {
               Navigator.pop(context);
             }
           },
-          child: const Text("Supprimer"),
+          child: Text(t(context, 'remove')),
         )
       ],
     ));
@@ -403,11 +401,11 @@ class ControlPanel extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.keyboard, color: Colors.blue),
-            SizedBox(width: 10),
-            Text("Raccourcis Clavier"),
+            const Icon(Icons.keyboard, color: Colors.blue),
+            const SizedBox(width: 10),
+            Text(t(context, 'shortcuts')),
           ],
         ),
         content: SizedBox(
@@ -416,27 +414,27 @@ class ControlPanel extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _shortcutGroup("Fichier", [
-                  _shortcutItem("Sauvegarder", "Ctrl + S"),
-                  _shortcutItem("Importer", "Ctrl + O"),
-                  _shortcutItem("Charger SoundFont", "Ctrl + F"),
-                  _shortcutItem("Réinit MIDI", "Ctrl + M"),
+                _shortcutGroup(t(context, 'file'), [
+                  _shortcutItem(t(context, 'save'), "Ctrl + S"),
+                  _shortcutItem(t(context, 'load'), "Ctrl + O"),
+                  _shortcutItem(t(context, 'soundfont'), "Ctrl + F"),
+                  _shortcutItem(t(context, 'midi_init'), "Ctrl + M"),
                 ]),
                 const Divider(),
-                _shortcutGroup("Édition", [
-                  _shortcutItem("Mode Accord", "A"),
-                  _shortcutItem("Ajouter Silence", "Espace"),
-                  _shortcutItem("Supprimer Silence", "Retour Arrière"),
-                  _shortcutItem("Effacer dernière Note", "Suppr"),
-                  _shortcutItem("Tout Effacer", "Ctrl + Suppr"),
-                  _shortcutItem("Afficher toutes les pistes", "V"),
+                _shortcutGroup(t(context, 'edition'), [
+                  _shortcutItem(t(context, 'chord_mode'), "A"),
+                  _shortcutItem(t(context, 'add_silence'), "Espace"),
+                  _shortcutItem(t(context, 'rm_silence'), "Retour Arrière"),
+                  _shortcutItem(t(context, 'del_note'), "Suppr"),
+                  _shortcutItem(t(context, 'clear_all'), "Ctrl + Suppr"),
+                  _shortcutItem(t(context, 'all_tracks'), "V"),
                 ]),
                 const Divider(),
-                _shortcutGroup("Lecture & Système", [
-                  _shortcutItem("Mode Jouer / Stop", "P"),
-                  _shortcutItem("Apparence", "T"),
-                  _shortcutItem("Auto-silence", "U"),
-                  _shortcutItem("PANIC (Silence complet)", "Echap"),
+                _shortcutGroup(t(context, 'playback'), [
+                  _shortcutItem(t(context, 'play'), "P"),
+                  _shortcutItem(t(context, 'appearance'), "T"),
+                  _shortcutItem(t(context, 'auto_silence'), "U"),
+                  _shortcutItem(t(context, 'panic'), "Echap"),
                 ]),
               ],
             ),
@@ -445,7 +443,7 @@ class ControlPanel extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Fermer"),
+            child: Text(t(context, 'close')),
           ),
         ],
       ),

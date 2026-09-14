@@ -4,6 +4,7 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../providers/style_provider.dart';
 import '../providers/session_provider.dart';
 import '../models/style_config.dart';
+import '../l10n.dart';
 
 class CustomizationPage extends StatelessWidget {
   const CustomizationPage({super.key});
@@ -16,7 +17,7 @@ class CustomizationPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Personnalisation des Notes"),
+        title: Text(t(context, 'customization_title')),
         actions: [
           IconButton(
             icon: const Icon(Icons.save),
@@ -32,14 +33,14 @@ class CustomizationPage extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _sectionTitle("Différenciation"),
+                _sectionTitle(t(context, 'differentiation')),
                 DropdownButtonFormField<DifferentiationMode>(
                   initialValue: config.mode,
-                  decoration: const InputDecoration(labelText: "Mode"),
+                  decoration: InputDecoration(labelText: t(context, 'mode')),
                   items: DifferentiationMode.values.map((m) {
                     return DropdownMenuItem(
                       value: m,
-                      child: Text(_modeLabel(m)),
+                      child: Text(_modeLabel(context, m)),
                     );
                   }).toList(),
                   onChanged: (v) {
@@ -50,7 +51,7 @@ class CustomizationPage extends StatelessWidget {
                 ),
                 if (config.mode == DifferentiationMode.split) ...[
                   const SizedBox(height: 16),
-                  Text("Touche de séparation: ${config.splitKey}"),
+                  Text(t(context, 'split_key', {'key': config.splitKey.toString()})),
                   Slider(
                     value: config.splitKey.toDouble(),
                     min: 0,
@@ -65,8 +66,8 @@ class CustomizationPage extends StatelessWidget {
                 if (config.mode == DifferentiationMode.byTrack) ...[
                   const SizedBox(height: 16),
                   SwitchListTile(
-                    title: const Text("Assombrir les touches noires"),
-                    subtitle: const Text("Applique une teinte plus sombre aux notes noires de chaque piste"),
+                    title: Text(t(context, 'darken_black_keys')),
+                    subtitle: Text(t(context, 'darken_black_keys_sub')),
                     value: config.darkenBlackKeysByTrack,
                     onChanged: (v) {
                       styleProvider.currentConfig = config.copyWith(darkenBlackKeysByTrack: v);
@@ -74,11 +75,11 @@ class CustomizationPage extends StatelessWidget {
                     contentPadding: EdgeInsets.zero,
                   ),
                   const SizedBox(height: 16),
-                  _sectionTitle("Couleurs par Piste"),
+                  _sectionTitle(t(context, 'tracks')),
                   ...sessionProvider.availableTracks.map((tId) {
                     return _colorTile(
                       context,
-                      "Piste $tId",
+                      t(context, 'track_label', {'id': tId.toString()}),
                       config.trackColors[tId] ?? config.colorA,
                       (c) {
                         final newMap = Map<int, Color>.from(config.trackColors);
@@ -90,8 +91,8 @@ class CustomizationPage extends StatelessWidget {
                 ],
                 if (config.mode == DifferentiationMode.gradient) ...[
                   const SizedBox(height: 24),
-                  _sectionTitle("Texture (Gradient)"),
-                  Text("Angle: ${config.gradientAngle.toInt()}°"),
+                  _sectionTitle(t(context, 'texture_gradient')),
+                  Text(t(context, 'angle', {'angle': config.gradientAngle.toInt().toString()})),
                   Slider(
                     value: config.gradientAngle,
                     min: 0,
@@ -103,7 +104,7 @@ class CustomizationPage extends StatelessWidget {
                     },
                   ),
                   const SizedBox(height: 8),
-                  const Text("Couleurs du dégradé:"),
+                  Text(t(context, 'gradient_colors')),
                   Row(
                     children: [
                       ...config.gradientColors.asMap().entries.map((entry) {
@@ -140,17 +141,17 @@ class CustomizationPage extends StatelessWidget {
                 ],
                 if (config.mode != DifferentiationMode.byTrack && config.mode != DifferentiationMode.gradient) ...[
                   const SizedBox(height: 24),
-                  _sectionTitle("Couleurs de base"),
+                  _sectionTitle(t(context, 'base_colors')),
                   _colorTile(
                     context,
-                    config.mode == DifferentiationMode.blackWhite ? "Touches Blanches" : "Primaire (Gauche)",
+                    config.mode == DifferentiationMode.blackWhite ? t(context, 'white_keys') : t(context, 'primary_left'),
                     config.colorA,
                     (c) => styleProvider.currentConfig = config.copyWith(colorA: c),
                   ),
                   if (config.mode != DifferentiationMode.none)
                     _colorTile(
                       context,
-                      config.mode == DifferentiationMode.blackWhite ? "Touches Noires" : "Secondaire (Droite)",
+                      config.mode == DifferentiationMode.blackWhite ? t(context, 'black_keys') : t(context, 'secondary_right'),
                       config.colorB,
                       (c) => styleProvider.currentConfig = config.copyWith(colorB: c),
                     ),
@@ -166,7 +167,7 @@ class CustomizationPage extends StatelessWidget {
               children: [
                 Padding(
                   padding: const EdgeInsets.all(8.0),
-                  child: _sectionTitle("Styles Enregistrés"),
+                  child: _sectionTitle(t(context, 'saved_styles')),
                 ),
                 Expanded(
                   child: ListView.builder(
@@ -203,13 +204,13 @@ class CustomizationPage extends StatelessWidget {
     );
   }
 
-  String _modeLabel(DifferentiationMode mode) {
+  String _modeLabel(BuildContext context, DifferentiationMode mode) {
     return switch (mode) {
-      DifferentiationMode.none => "Aucune",
-      DifferentiationMode.blackWhite => "Touches Noires / Blanches",
-      DifferentiationMode.split => "Séparation Gauche / Droite",
-      DifferentiationMode.byTrack => "Par Piste",
-      DifferentiationMode.gradient => "Gradient Global"
+      DifferentiationMode.none => t(context, 'mode_none'),
+      DifferentiationMode.blackWhite => t(context, 'mode_black_white'),
+      DifferentiationMode.split => t(context, 'mode_split'),
+      DifferentiationMode.byTrack => t(context, 'mode_by_track'),
+      DifferentiationMode.gradient => t(context, 'mode_gradient')
     };
   }
 
@@ -241,7 +242,7 @@ class CustomizationPage extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Choisir une couleur"),
+        title: Text(t(context, 'choose_color')),
         content: SingleChildScrollView(
           child: ColorPicker(
             pickerColor: initialColor,
@@ -253,14 +254,14 @@ class CustomizationPage extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Annuler"),
+            child: Text(t(context, 'cancel')),
           ),
           TextButton(
             onPressed: () {
               onColorChanged(pickedColor);
               Navigator.pop(context);
             },
-            child: const Text("OK"),
+            child: Text(t(context, 'ok')),
           ),
         ],
       ),
@@ -272,15 +273,15 @@ class CustomizationPage extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Enregistrer le style"),
+        title: Text(t(context, 'save_style')),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(hintText: "Nom du style"),
+          decoration: InputDecoration(hintText: t(context, 'style_name')),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Annuler"),
+            child: Text(t(context, 'cancel')),
           ),
           TextButton(
             onPressed: () {
@@ -289,7 +290,7 @@ class CustomizationPage extends StatelessWidget {
                 Navigator.pop(context);
               }
             },
-            child: const Text("Enregistrer"),
+            child: Text(t(context, 'save')),
           ),
         ],
       ),
