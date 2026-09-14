@@ -31,6 +31,7 @@ class ControlPanel extends StatelessWidget {
                       if (val == 'load') provider.importFile(context: context);
                       if (val == 'midi') provider.initMidi();
                       if (val == 'sf2') provider.pickAndLoadSoundFont(context: context);
+                      if (val == 'built_in') _showBuiltInSoundFontsDialog(context, provider);
                     },
                     itemBuilder: (context) => [
                       const PopupMenuItem(value: 'save', child: Text("Sauvegarder (Ctrl+S)")),
@@ -315,6 +316,47 @@ class ControlPanel extends StatelessWidget {
         )
       ],
     ));
+  }
+
+  void _showBuiltInSoundFontsDialog(BuildContext context, SessionProvider provider) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.library_music, color: Colors.orange),
+            SizedBox(width: 10),
+            Text("SoundFonts Intégrés"),
+          ],
+        ),
+        content: SizedBox(
+          width: 400,
+          height: 450,
+          child: ListView.builder(
+            itemCount: SessionProvider.builtInSoundFonts.length,
+            itemBuilder: (context, index) {
+              final sf = SessionProvider.builtInSoundFonts[index];
+              final isSelected = provider.currentSoundFontName == sf['name'];
+              return ListTile(
+                title: Text(sf['name']!, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                subtitle: Text(sf['path']!, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                trailing: isSelected ? const Icon(Icons.check, color: Colors.green) : null,
+                onTap: () {
+                  Navigator.pop(context);
+                  provider.loadBuiltInSoundFont(sf['path']!, sf['name']!, context: context);
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Fermer"),
+          ),
+        ],
+      ),
+    );
   }
 
   // Popup for removing Silence

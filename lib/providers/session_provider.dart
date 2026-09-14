@@ -100,6 +100,53 @@ class SessionProvider with ChangeNotifier {
     }
   }
 
+  static const List<Map<String, String>> builtInSoundFonts = [
+    {'name': 'AI APiano 02', 'path': 'assets/sounds/built_in/AI-APiano02trans.SF2'},
+    {'name': 'Florestan Piano', 'path': 'assets/sounds/built_in/Florestan_Piano.sf2'},
+    {'name': 'Full Grand', 'path': 'assets/sounds/built_in/Full Grand.sf2'},
+    {'name': 'Grand Piano', 'path': 'assets/sounds/built_in/Grand Piano.sf2'},
+    {'name': 'HipHopKeyz1', 'path': 'assets/sounds/built_in/HipHopKeyz1.sf2'},
+    {'name': 'KAWAI Good Piano', 'path': 'assets/sounds/built_in/KAWAI good piano.sf2'},
+    {'name': 'Korg Triton Piano', 'path': 'assets/sounds/built_in/Korg_Triton_Piano.sf2'},
+    {'name': 'Motif ES6 Concert Piano', 'path': 'assets/sounds/built_in/Motif ES6 Concert Piano(12Mb).SF2'},
+    {'name': 'Motif Piano', 'path': 'assets/sounds/built_in/Motif Piano.SF2'},
+    {'name': 'Open Diapason Pipe Organ', 'path': 'assets/sounds/built_in/Open_Diapason_Pipe_Organ.sf2.sf2'},
+    {'name': 'Piano Korg Triton', 'path': 'assets/sounds/built_in/Piano Korg Triton.SF2'},
+    {'name': 'Piano Default', 'path': 'assets/sounds/built_in/Piano.sf2'},
+    {'name': 'Piano ProKitz', 'path': 'assets/sounds/built_in/Piano_ProKitz'},
+    {'name': 'Porter Grand Piano', 'path': 'assets/sounds/built_in/Porter Grand Piano.sf2'},
+    {'name': 'Roland 64Voice Piano', 'path': 'assets/sounds/built_in/Roland_64VoicePiano.sf2'},
+    {'name': 'SC55 Piano V2', 'path': 'assets/sounds/built_in/SC55 Piano_V2.sf2'},
+  ];
+
+  Future<void> loadBuiltInSoundFont(String assetPath, String displayName, {BuildContext? context}) async {
+    debugPrint("--- LOADING BUILT-IN SF2: $assetPath ---");
+    try {
+      await _ensureMidiProInitialized();
+      _currentSfId = await _midiPro.loadSoundfontAsset(assetPath: assetPath);
+      _currentSoundFontName = displayName;
+      
+      if (Platform.isWindows) {
+        _isCustomSf2LoadedOnWindows = true;
+      }
+
+      debugPrint("Built-in SoundFont loaded successfully: $displayName");
+      if (context != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("SoundFont intégré chargé : $displayName")),
+        );
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error loading built-in SoundFont $displayName: $e");
+      if (context != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Erreur lors du chargement de $displayName")),
+        );
+      }
+    }
+  }
+
   // --- SOUND HELPERS ---
   void _playNote(int midiNote, {int velocity = 100}) {
     if (Platform.isWindows) {
