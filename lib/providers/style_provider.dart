@@ -6,10 +6,13 @@ import '../models/style_config.dart';
 class StyleProvider with ChangeNotifier {
   StyleConfig _currentConfig = StyleConfig(name: 'Défaut');
   List<StyleConfig> _savedConfigs = [];
+  Future<void>? _initFuture;
 
   StyleProvider() {
-    _loadFromPrefs();
+    _initFuture = _loadFromPrefs();
   }
+
+  Future<void> get initializationDone => _initFuture ?? Future.value();
 
   StyleConfig get currentConfig => _currentConfig;
   List<StyleConfig> get savedConfigs => _savedConfigs;
