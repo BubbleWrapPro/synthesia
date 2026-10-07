@@ -12,7 +12,7 @@ A custom Flutter-based piano learning and recording interface with MIDI support,
 ## 🎹 Overview
 Synthesia is an interactive 88-key piano application designed for creating, recording, and replaying "waterfall" style note cascades. It bridges the gap between manual note-by-note creation and real-time MIDI recording, offering a highly customizable visual experience for musicians and developers alike.
 
-Built with **Flutter**, it runs seamlessly on both **Windows** (for advanced MIDI recording and piano connection) and **Android** (for portable practice).
+Built with **Flutter**, it runs on **Windows**, **Linux**, and **Android**.
 
 ---
 
@@ -32,6 +32,7 @@ You can find the latest stable versions on the [GitHub Releases](https://github.
 - **High-Quality Audio Engine**:
     - **SoundFont Support**: Load custom `.sf2` files for realistic instrument sounds (Grand Piano included by default).
     - **Windows Native Synth**: Uses the Microsoft GS Wavetable Synth by default on Windows for low-latency feedback.
+    - **Linux Audio**: Uses FluidSynth for built-in and custom `.sf2` playback.
 - **Dynamic Waterfall Visualization**: A smooth "cascade" view that renders notes with synchronized animations, adjustable height, and BPM control.
 - **Advanced Styling System**:
     - **Coloring Modes**: Differentiation by key type (Black/White), split-point (Left/Right hand), or **Track ID**.
@@ -51,6 +52,7 @@ You can find the latest stable versions on the [GitHub Releases](https://github.
 ### Prerequisites
 - Flutter SDK (Dart `^3.9.2`)
 - A MIDI-compatible device (Optional, but highly recommended for recording)
+- Linux: FluidSynth development files to build (`libfluidsynth-dev` on Debian/Ubuntu) and a FluidSynth runtime/audio backend on the target system.
 
 ### Installation & Building Releases
 1. **Clone the repository**:
@@ -66,6 +68,9 @@ You can find the latest stable versions on the [GitHub Releases](https://github.
    ```bash
    # For Windows
    flutter run -d windows
+
+   # For Linux (install libfluidsynth-dev first)
+   flutter run -d linux
    
    # For Android
    flutter run -d android
@@ -105,7 +110,7 @@ Une interface personnalisée de lecture et d'enregistrement de piano basée sur 
 ## 🎹 Présentation
 Synthesia est une application interactive de piano à 88 touches conçue pour créer, enregistrer et rejouer des cascades de notes de type "waterfall". Elle fait le pont entre la création manuelle note par note et l'enregistrement MIDI en temps réel.
 
-Développée avec **Flutter**, elle fonctionne sur **Windows** (idéal pour la connexion de pianos numériques et l'enregistrement MIDI) et **Android** (pour la pratique nomade).
+Développée avec **Flutter**, elle fonctionne sur **Windows**, **Linux** et **Android**.
 
 ---
 
@@ -124,6 +129,7 @@ Vous trouverez les dernières versions stables sur la page [GitHub Releases](htt
     - **Édition Manuelle** : Ajoutez, modifiez ou supprimez des notes et silences via l'interface ou les raccourcis clavier.
 - **Moteur Audio Haute Qualité** :
     - **SoundFont (.sf2)** : Chargez vos propres banques de sons (Grand Piano inclus par défaut).
+    - **Audio Linux** : Utilise FluidSynth pour lire les fichiers `.sf2` intégrés ou personnalisés.
 - **Visualisation Waterfall Dynamique** : Vue en cascade fluide avec animations synchronisées et réglage BPM.
 - **Système de Style Avancé** : Personnalisation des couleurs par type de touche, main (gauche/droite) ou ID de piste avec persistance (`shared_preferences`).
 - **Gestion de Sessions** : Importation et exportation de sessions au format JSON.
@@ -139,6 +145,7 @@ Vous trouverez les dernières versions stables sur la page [GitHub Releases](htt
 ### Prérequis
 - Flutter SDK (Dart `^3.9.2`)
 - Appareil compatible MIDI (Optionnel)
+- Linux : fichiers de développement FluidSynth pour compiler (`libfluidsynth-dev` sur Debian/Ubuntu) et FluidSynth avec un pilote audio disponible sur le système cible.
 
 ### Installation & Génération des Builds
 1. **Cloner le dépôt** :
@@ -154,6 +161,9 @@ Vous trouverez les dernières versions stables sur la page [GitHub Releases](htt
    ```bash
    # Pour Windows
    flutter run -d windows
+
+   # Pour Linux (installer libfluidsynth-dev avant)
+   flutter run -d linux
    
    # Pour Android
    flutter run -d android

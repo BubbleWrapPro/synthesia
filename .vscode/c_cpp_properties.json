@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "name": "Linux",
+      "compilerPath": "/usr/bin/clang++",
+      "compileCommands": "${workspaceFolder}/build/linux/x64/debug/compile_commands.json",
+      "includePath": [
+        "${workspaceFolder}/linux",
+        "${workspaceFolder}/linux/flutter/ephemeral",
+        "${workspaceFolder}/linux/flutter/ephemeral/.plugin_symlinks/**",
+        "/usr/include",
+        "/usr/local/include",
+        "${default}"
+      ],
+      "defines": [
+        "APPLICATION_ID=\"com.synthesia.synthesia\""
+      ],
+      "cStandard": "c17",
+      "cppStandard": "c++14",
+      "intelliSenseMode": "linux-clang-x64"
+    }
+  ],
+  "version": 4
+}

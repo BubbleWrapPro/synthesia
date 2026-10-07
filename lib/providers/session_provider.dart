@@ -65,7 +65,7 @@ class SessionProvider with ChangeNotifier {
     if (file != null) {
       if (!file.name.toLowerCase().endsWith('.sf2')) {
         debugPrint("Erreur: Le fichier sélectionné n'est pas un SoundFont (.sf2 valide)");
-        if (context != null) {
+        if (context != null && context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(t(context, 'error_invalid_sf2'))),
           );
@@ -89,7 +89,7 @@ class SessionProvider with ChangeNotifier {
           final Uint8List bytes = await file.readAsBytes();
           _currentSfId = await _midiPro.loadSoundfontData(data: bytes);
           _currentSoundFontName = file.name;
-          debugPrint("Mobile: Loaded SF2 via flutter_midi_pro: ${file.name}");
+          debugPrint("Loaded SF2 via flutter_midi_pro: ${file.name}");
         }
 
         notifyListeners();
@@ -190,7 +190,7 @@ class SessionProvider with ChangeNotifier {
           _midiChannel.invokeMethod('stopMidiNote', i);
         }
       }
-    } else {
+    } else if (_isMidiProInitialized) {
       // Mobile loop
       _midiPro.stopAllNotes(sfId: _currentSfId);
     }
@@ -997,7 +997,7 @@ class SessionProvider with ChangeNotifier {
           debugPrint("Imported ${rawNotes.length} notes from JSON");
         } catch (e) {
           debugPrint("Erreur import JSON: $e");
-          if (context != null) {
+          if (context != null && context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(t(context, 'json_import_error', {'error': e.toString()}))),
             );
