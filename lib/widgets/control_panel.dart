@@ -65,10 +65,9 @@ class ControlPanel extends StatelessWidget {
                           children: [
                             Text(t(context, 'chord_mode')),
                             const Spacer(),
-                            Switch(
-                              value: provider.isChordMode,
-                              onChanged: (v) => provider.toggleChordMode(),
-                              activeThumbColor: Colors.green,
+                            Icon(
+                              provider.isChordMode ? Icons.check_box : Icons.check_box_outline_blank,
+                              color: provider.isChordMode ? Colors.green : Colors.grey,
                             ),
                           ],
                         ),
@@ -78,6 +77,27 @@ class ControlPanel extends StatelessWidget {
                       PopupMenuItem(value: 'del_note', child: Text(t(context, 'del_note'))),
                       PopupMenuItem(value: 'clear', child: Text(t(context, 'clear_all'), style: const TextStyle(color: Colors.red))),
                     ],
+                  ),
+
+                  const SizedBox(width: 4),
+
+                  // Bouton direct Mode Accord
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: provider.isChordMode ? Colors.orange : Colors.grey[300],
+                      foregroundColor: provider.isChordMode ? Colors.white : Colors.black,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    ),
+                    icon: Icon(
+                      Icons.music_note,
+                      size: 16,
+                      color: provider.isChordMode ? Colors.white : Colors.black54,
+                    ),
+                    label: Text(
+                      provider.isChordMode ? "Accord (ON)" : "Accord (OFF)",
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () => provider.toggleChordMode(),
                   ),
 
                   const VerticalDivider(width: 10),
@@ -143,16 +163,26 @@ class ControlPanel extends StatelessWidget {
                   _actionGroup("", [
                     IconButton(
                       icon: const Icon(Icons.fast_rewind, color: Colors.blue),
+                      tooltip: isEditMode ? "Décaler vers le bas" : "Reculer",
                       onPressed: () {
                         double screenHeight = MediaQuery.of(context).size.height;
-                        provider.seek(-(screenHeight / 8.0), screenHeight);
+                        if (isEditMode) {
+                          provider.scrollEditOffset(-screenHeight / 8.0);
+                        } else {
+                          provider.seek(-(screenHeight / 8.0), screenHeight);
+                        }
                       },
                     ),
                     IconButton(
                       icon: const Icon(Icons.fast_forward, color: Colors.blue),
+                      tooltip: isEditMode ? "Décaler vers le haut" : "Avancer",
                       onPressed: () {
                         double screenHeight = MediaQuery.of(context).size.height;
-                        provider.seek(screenHeight / 8.0, screenHeight);
+                        if (isEditMode) {
+                          provider.scrollEditOffset(screenHeight / 8.0);
+                        } else {
+                          provider.seek(screenHeight / 8.0, screenHeight);
+                        }
                       },
                     ),
                   ]),

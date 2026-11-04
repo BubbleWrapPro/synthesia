@@ -274,7 +274,7 @@ class SessionProvider with ChangeNotifier {
   Timer? _animTimer;
   final List<NoteModel> _fallingNotes = [];
   final double _fallingY = 0.0;
-  List<NoteModel> _activeFallingNotes = []; // Pour le playback
+  final List<NoteModel> _activeFallingNotes = []; // Pour le playback
   double _editScrollOffset = 0.0; // [NEW] Scroll en mode édition
 
   // Variables pour l'enregistrement MIDI temps réel (Recording)
@@ -436,13 +436,17 @@ class SessionProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  void scrollEditOffset(double delta) {
+    _editScrollOffset += delta;
+    if (_editScrollOffset < 0) _editScrollOffset = 0;
+    notifyListeners();
+  }
+
   void handleScroll(double delta, double screenHeight) {
     if (_currentMode == AppMode.play) {
       seek(delta, screenHeight);
     } else {
-      _editScrollOffset += delta;
-      if (_editScrollOffset < 0) _editScrollOffset = 0;
-      notifyListeners();
+      scrollEditOffset(delta);
     }
   }
 
@@ -458,10 +462,11 @@ class SessionProvider with ChangeNotifier {
 
       double trackMax = trackMaxOffsets[note.trackId] ?? 0.0;
       double noteStartInSong = (trackMax - (note.currentOffset + note.height)) * pixelRatio;
-      double playingEndInSong = (trackMax - (note.currentOffset + note.height - note.playingHeight)) * pixelRatio;
+      double noteVisualOffset = cascadeHeight - (_playbackPosition - noteStartInSong);
+      double noteHeightPixels = note.height * pixelRatio;
 
-      // If the note is currently active (visually or sonically) at _playbackPosition
-      if (noteStartInSong <= _playbackPosition && playingEndInSong > _playbackPosition) {
+      // Check if note is visible anywhere in the cascade view
+      if (noteVisualOffset + noteHeightPixels >= 0 && noteVisualOffset <= cascadeHeight) {
         final fNote = NoteModel(
           id: note.id,
           keyIndex: note.keyIndex,
@@ -471,7 +476,7 @@ class SessionProvider with ChangeNotifier {
           overrideColor: note.overrideColor,
           chordId: note.chordId,
           isSilence: note.isSilence,
-          currentOffset: cascadeHeight - (_playbackPosition - noteStartInSong),
+          currentOffset: noteVisualOffset,
           fromMidi: note.fromMidi,
           trackId: note.trackId,
           velocity: note.velocity,
@@ -652,13 +657,23 @@ class SessionProvider with ChangeNotifier {
     double pixelRatio = screenHeight / 8.0;
     double insertionOffset = _editScrollOffset / pixelRatio;
 
+    int targetTrackId = _showAllTracksInEdit ? 0 : _currentTrackId;
+
     // Ajout manuel "one shot" (ancienne logique, toujours utile pour l'UI)
     double h = _defaultHeight;
-    String cId = (_isChordMode && _session.isNotEmpty)
-        ? _session.last.chordId
-        : DateTime.now().toIso8601String();
-
-    int targetTrackId = _showAllTracksInEdit ? 0 : _currentTrackId;
+    String cId;
+    if (_isChordMode) {
+      final notesAtOffset = _session.where((n) =>
+          n.trackId == targetTrackId &&
+          (n.currentOffset - insertionOffset).abs() < 0.05).toList();
+      if (notesAtOffset.isNotEmpty) {
+        cId = notesAtOffset.last.chordId;
+      } else {
+        cId = DateTime.now().toIso8601String();
+      }
+    } else {
+      cId = DateTime.now().toIso8601String();
+    }
 
     NoteModel newNote = NoteModel(
       keyIndex: keyIndex,
@@ -798,25 +813,22 @@ class SessionProvider with ChangeNotifier {
     _isPlaying = true;
     _isPaused = false;
     _injectionDone = false;
-    _activeFallingNotes = [];
-    _fallingNotes.clear();
-    notifyListeners();
 
     // 1. Moteur physique (Timer de descente)
     double cascadeHeight = screenHeight * (5.0 / 9.0);
     double pixelRatio = screenHeight / 8.0;
-      double pixelsPerMs = (pixelRatio * (_bpm / 60.0)) / 1000.0;
+    double pixelsPerMs = (pixelRatio * (_bpm / 60.0)) / 1000.0;
 
-      // --- CORRECTION DIRECTION ---
-      // Dans Synthesia, les notes avec de grands offsets sont au DEBUT du morceau (plus haut)
-      // Les notes avec offset 0 sont à la FIN (présent lors de l'enregistrement)
+    final trackMaxOffsets = _getTrackMaxOffsets();
+    double globalMaxOffset = 0;
+    if (trackMaxOffsets.isNotEmpty) {
+      globalMaxOffset = trackMaxOffsets.values.fold(0, (a, b) => a > b ? a : b);
+    }
 
-      // [NEW] Calcul des offsets par piste pour synchronisation au début
-      final trackMaxOffsets = _getTrackMaxOffsets();
-      double globalMaxOffset = 0;
-      if (trackMaxOffsets.isNotEmpty) {
-        globalMaxOffset = trackMaxOffsets.values.fold(0, (a, b) => a > b ? a : b);
-      }
+    // Pre-calculate visible notes in the cascade view
+    _recalculateActiveFallingNotes(screenHeight, trackMaxOffsets);
+
+    notifyListeners();
 
     // Pre-calculate which notes should be audible (impacted) at the current _playbackPosition
     for (var note in _session) {

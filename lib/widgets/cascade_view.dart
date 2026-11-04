@@ -27,6 +27,9 @@ class CascadeView extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           return GestureDetector(
+            onVerticalDragUpdate: (details) {
+              provider.handleScroll(-details.delta.dy, screenHeight);
+            },
             onTapDown: provider.isPlaying ? null : (details) {
               _handleTap(context, details.localPosition, constraints, provider, style, screenHeight);
             },
@@ -193,8 +196,8 @@ class CascadeViewPainter extends CustomPainter {
         ? provider.activeFallingNotes 
         : provider.session.where((n) => provider.showAllTracksInEdit || n.trackId == provider.currentTrackId).toList();
 
-    List<Rect> maskedRects = [];
-    List<MapEntry<Rect, Color>> unmaskedRects = [];
+    List<MapEntry<Rect, int>> maskedRects = [];
+    List<MapEntry<Rect, MapEntry<Color, int>>> unmaskedRects = [];
 
     for (var note in notesToDraw) {
       if (note.isSilence) continue;
@@ -214,10 +217,10 @@ class CascadeViewPainter extends CustomPainter {
 
       bool hasOverride = note.overrideColor != null;
       if (config.mode == DifferentiationMode.gradient && !hasOverride) {
-        maskedRects.add(rect);
+        maskedRects.add(MapEntry(rect, note.keyIndex));
       } else {
         Color noteColor = note.overrideColor ?? style.getColorForNote(note.keyIndex, trackId: note.trackId);
-        unmaskedRects.add(MapEntry(rect, noteColor));
+        unmaskedRects.add(MapEntry(rect, MapEntry(noteColor, note.keyIndex)));
       }
     }
 
@@ -231,15 +234,16 @@ class CascadeViewPainter extends CustomPainter {
         colors: config.gradientColors,
       ).createShader(Offset.zero & size);
 
-      for (var rect in maskedRects) {
-        _drawNoteTile(canvas, rect, gradientPaint);
+      for (var entry in maskedRects) {
+        _drawNoteTile(canvas, entry.key, gradientPaint, entry.value);
       }
     }
 
     // 4. Draw Unmasked (Solid/Local Gradient) Notes
     for (var entry in unmaskedRects) {
       Paint notePaint = Paint()..style = PaintingStyle.fill;
-      Color noteColor = entry.value;
+      Color noteColor = entry.value.key;
+      int keyIndex = entry.value.value;
       
       notePaint.shader = LinearGradient(
         begin: Alignment.topCenter,
@@ -252,11 +256,31 @@ class CascadeViewPainter extends CustomPainter {
         stops: const [0.0, 0.4, 1.0],
       ).createShader(entry.key);
 
-      _drawNoteTile(canvas, entry.key, notePaint);
+      _drawNoteTile(canvas, entry.key, notePaint, keyIndex);
+    }
+
+    // 5. Draw Edit Insertion Line in Edit Mode
+    if (!provider.isPlaying) {
+      Paint linePaint = Paint()
+        ..color = Colors.redAccent.withValues(alpha: 0.85)
+        ..strokeWidth = 2.0
+        ..style = PaintingStyle.stroke;
+
+      canvas.drawLine(Offset(0, size.height - 1.0), Offset(size.width, size.height - 1.0), linePaint);
+
+      TextPainter textPainter = TextPainter(
+        text: const TextSpan(
+          text: " ◄ Insertion ",
+          style: TextStyle(color: Colors.redAccent, fontSize: 9, fontWeight: FontWeight.bold),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+      textPainter.paint(canvas, Offset(size.width - textPainter.width - 4, size.height - textPainter.height - 2));
     }
   }
 
-  void _drawNoteTile(Canvas canvas, Rect rect, Paint paint) {
+  void _drawNoteTile(Canvas canvas, Rect rect, Paint paint, int keyIndex) {
     RRect rRect = RRect.fromRectAndRadius(rect, const Radius.circular(1.5));
     canvas.drawRRect(rRect, paint);
 
@@ -269,6 +293,42 @@ class CascadeViewPainter extends CustomPainter {
     Paint barPaint = Paint()..color = Colors.black.withValues(alpha: 0.8)..style = PaintingStyle.fill;
     Rect barRect = Rect.fromLTWH(rect.left, rect.bottom - 2.0, rect.width, 2.0);
     canvas.drawRect(barRect, barPaint);
+
+    // Draw international note name if note is large enough
+    if (rect.height >= 14.0 && rect.width >= 8.0) {
+      String noteName = _getInternationalNoteName(keyIndex);
+      double fontSize = math.min(rect.width * 0.65, 9.5);
+
+      TextPainter textPainter = TextPainter(
+        text: TextSpan(
+          text: noteName,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: fontSize,
+            fontWeight: FontWeight.bold,
+            shadows: const [
+              Shadow(offset: Offset(0.5, 0.5), blurRadius: 1.0, color: Colors.black87),
+            ],
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+
+      double textX = rect.left + (rect.width - textPainter.width) / 2;
+      double textY = rect.bottom - textPainter.height - 2.5;
+
+      if (textY >= rect.top) {
+        textPainter.paint(canvas, Offset(textX, textY));
+      }
+    }
+  }
+
+  String _getInternationalNoteName(int keyIndex) {
+    const pitches = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    int semitone = (keyIndex + 9) % 12;
+    int octave = (keyIndex + 9) ~/ 12;
+    return '${pitches[semitone]}$octave';
   }
 
   double _calculateLeftPos(int keyIndex, double whiteW, double blackW) {
