@@ -970,9 +970,17 @@ class SessionProvider with ChangeNotifier {
     const XTypeGroup typeGroup = XTypeGroup(label: 'JSON files', extensions: <String>['json']);
     final FileSaveLocation? result = await getSaveLocation(suggestedName: 'ma_musique.json', acceptedTypeGroups: [typeGroup]);
     if (result != null) {
-      final File file = File(result.path);
+      String filePath = result.path;
+      if (!filePath.toLowerCase().endsWith('.json')) {
+        filePath += '.json';
+      }
+      final File file = File(filePath);
       String jsonStr = jsonEncode(_session.map((e) => e.toJson()).toList());
       await file.writeAsString(jsonStr);
+
+      _currentFileName = filePath.split(RegExp(r'[/\\]')).last;
+      _updateSystemTitle();
+      notifyListeners();
     }
   }
 

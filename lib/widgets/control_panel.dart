@@ -86,11 +86,11 @@ class ControlPanel extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: provider.isChordMode ? Colors.orange : Colors.grey[300],
                       foregroundColor: provider.isChordMode ? Colors.white : Colors.black,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     ),
                     icon: Icon(
                       Icons.music_note,
-                      size: 16,
+                      size: 14,
                       color: provider.isChordMode ? Colors.white : Colors.black54,
                     ),
                     label: Text(
